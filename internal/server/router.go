@@ -34,6 +34,14 @@ func (r *Router) setupRoutes() {
 	mux.HandleFunc("POST /api/v1/upload", r.withMiddleware(h.Upload))
 	mux.HandleFunc("GET /api/v1/download/{path}", r.withMiddleware(h.Download))
 
+	// Directories operations
+	mux.HandleFunc("POST /api/v1/directories", r.withMiddleware(h.CreateDirectory))
+	mux.HandleFunc("GET /api/v1/directories/{path}", r.withMiddleware(h.ListFiles))
+
+	// Operations on directories
+	mux.HandleFunc("POST /api/v1/move", r.withMiddleware(h.MoveFile))
+	mux.HandleFunc("POST /api/v1/rename", r.withMiddleware(h.RenameFile))
+
 	fs := http.FileServer(http.Dir("./web/"))
 	mux.Handle("/", r.withMiddleware(http.StripPrefix("/", fs).ServeHTTP))
 

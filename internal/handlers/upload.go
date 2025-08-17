@@ -10,8 +10,6 @@ import (
 )
 
 func (h *Handlers) Upload(w http.ResponseWriter, r *http.Request) {
-
-	// Parse multipart form with memory limit
 	err := r.ParseMultipartForm(int64(h.cfg.Server.MaxMemory))
 	if err != nil {
 		utils.WriteErrorJSON(w, http.StatusBadRequest, "Failed to parse form: "+err.Error())
@@ -30,7 +28,6 @@ func (h *Handlers) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get optional path
 	targetPath := r.FormValue("path")
 	if targetPath == "" {
 		targetPath = "/"
