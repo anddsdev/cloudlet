@@ -1,7 +1,7 @@
 # ☁️ Cloudlet
 
 [![Go Version](https://img.shields.io/badge/Go-1.23.4-blue.svg)](https://golang.org/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-AGPL-green.svg)](LICENSE)
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/anddsdev/cloudlet)
 
 A lightweight, self-hosted file storage service designed to be simple, fast, and easy to use. Cloudlet provides a minimalist alternative to complex file management systems like Nextcloud, focusing on essential file operations without unnecessary overhead.
@@ -29,12 +29,14 @@ A lightweight, self-hosted file storage service designed to be simple, fast, and
 ### Installation
 
 1. **Clone the repository**
+
    ```bash
    git clone https://github.com/anddsdev/cloudlet.git
    cd cloudlet
    ```
 
 2. **Build the application**
+
    ```bash
    go mod download
    go build -o cloudlet ./cmd/cloudlet
@@ -65,8 +67,8 @@ Cloudlet uses a YAML configuration file located at `config/config.yaml`:
 ```yaml
 server:
   port: 8080
-  max_memory: 32000000      # 32MB
-  max_file_size: 100000000  # 100MB
+  max_memory: 32000000 # 32MB
+  max_file_size: 100000000 # 100MB
   storage:
     path: ./storage
   timeout:
@@ -84,14 +86,14 @@ database:
 
 ### Configuration Options
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `server.port` | HTTP server port | `8080` |
-| `server.max_memory` | Maximum memory for file uploads | `32MB` |
-| `server.max_file_size` | Maximum file size allowed | `100MB` |
-| `server.storage.path` | Physical storage directory | `./storage` |
-| `database.dsn` | SQLite database file path | `./data/cloudlet.db` |
-| `database.max_conn` | Maximum database connections | `10` |
+| Option                 | Description                     | Default              |
+| ---------------------- | ------------------------------- | -------------------- |
+| `server.port`          | HTTP server port                | `8080`               |
+| `server.max_memory`    | Maximum memory for file uploads | `32MB`               |
+| `server.max_file_size` | Maximum file size allowed       | `100MB`              |
+| `server.storage.path`  | Physical storage directory      | `./storage`          |
+| `database.dsn`         | SQLite database file path       | `./data/cloudlet.db` |
+| `database.max_conn`    | Maximum database connections    | `10`                 |
 
 ## 📖 API Documentation
 
@@ -99,37 +101,38 @@ database:
 
 #### Files
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/v1/files` | List files in root directory |
-| `GET` | `/api/v1/files/{path}` | List files in specific directory |
-| `POST` | `/api/v1/upload` | Upload files |
-| `GET` | `/api/v1/download/{path}` | Download a file |
-| `DELETE` | `/api/v1/files` | Delete a file |
+| Method   | Endpoint                  | Description                      |
+| -------- | ------------------------- | -------------------------------- |
+| `GET`    | `/api/v1/files`           | List files in root directory     |
+| `GET`    | `/api/v1/files/{path}`    | List files in specific directory |
+| `POST`   | `/api/v1/upload`          | Upload files                     |
+| `GET`    | `/api/v1/download/{path}` | Download a file                  |
+| `DELETE` | `/api/v1/files`           | Delete a file                    |
 
 #### Directories
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/v1/directories` | Create a new directory |
-| `GET` | `/api/v1/directories/{path}` | List directory contents |
+| Method | Endpoint                     | Description             |
+| ------ | ---------------------------- | ----------------------- |
+| `POST` | `/api/v1/directories`        | Create a new directory  |
+| `GET`  | `/api/v1/directories/{path}` | List directory contents |
 
 #### Operations
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/v1/move` | Move files or directories |
+| Method | Endpoint         | Description                 |
+| ------ | ---------------- | --------------------------- |
+| `POST` | `/api/v1/move`   | Move files or directories   |
 | `POST` | `/api/v1/rename` | Rename files or directories |
 
 #### Health
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/health` | Health check endpoint |
+| Method | Endpoint  | Description           |
+| ------ | --------- | --------------------- |
+| `GET`  | `/health` | Health check endpoint |
 
 ### Request/Response Examples
 
 #### Upload a file
+
 ```bash
 curl -X POST \
   -F "file=@example.txt" \
@@ -138,6 +141,7 @@ curl -X POST \
 ```
 
 #### Create a directory
+
 ```bash
 curl -X POST \
   -H "Content-Type: application/json" \
@@ -146,11 +150,13 @@ curl -X POST \
 ```
 
 #### List directory contents
+
 ```bash
 curl http://localhost:8080/api/v1/files/documents
 ```
 
 Response:
+
 ```json
 {
   "path": "/documents",
@@ -207,19 +213,15 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
    git checkout -b feature/amazing-feature
    ```
 4. **Make your changes**
-5. **Run tests**
-   ```bash
-   go test ./...
-   ```
-6. **Commit your changes**
+5. **Commit your changes**
    ```bash
    git commit -m "Add amazing feature"
    ```
-7. **Push to your branch**
+6. **Push to your branch**
    ```bash
    git push origin feature/amazing-feature
    ```
-8. **Open a Pull Request**
+7. **Open a Pull Request**
 
 ### Code Style
 
@@ -252,7 +254,7 @@ If you encounter any issues or have questions:
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the AGPL-3.0 License - see the [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 
