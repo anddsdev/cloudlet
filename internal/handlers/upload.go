@@ -38,16 +38,29 @@ func (h *Handlers) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, err := io.ReadAll(file)
-	if err != nil {
-		utils.WriteErrorJSON(w, http.StatusInternalServerError, "Failed to read file")
-		return
-	}
+	// Use streaming for files larger than 10MB to prevent memory leaks
+	const streamingThreshold = 10 * 1024 * 1024 // 10MB
+	
+	if header.Size > streamingThreshold {
+		// Use streaming upload for large files
+		err = h.fileService.SaveFileStream(header.Filename, targetPath, file, header.Size)
+		if err != nil {
+			utils.WriteErrorJSON(w, http.StatusInternalServerError, "Failed to save file: "+err.Error())
+			return
+		}
+	} else {
+		// Use traditional upload for small files (better performance)
+		data, err := io.ReadAll(file)
+		if err != nil {
+			utils.WriteErrorJSON(w, http.StatusInternalServerError, "Failed to read file")
+			return
+		}
 
-	err = h.fileService.SaveFile(header.Filename, targetPath, data)
-	if err != nil {
-		utils.WriteErrorJSON(w, http.StatusInternalServerError, "Failed to save file: "+err.Error())
-		return
+		err = h.fileService.SaveFile(header.Filename, targetPath, data)
+		if err != nil {
+			utils.WriteErrorJSON(w, http.StatusInternalServerError, "Failed to save file: "+err.Error())
+			return
+		}
 	}
 
 	response := &models.UploadResponse{

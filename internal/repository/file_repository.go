@@ -6,12 +6,14 @@ import (
 
 	"time"
 
+	"github.com/anddsdev/cloudlet/internal/database"
 	"github.com/anddsdev/cloudlet/internal/models"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 type FileRepository struct {
-	db *sql.DB
+	db          *sql.DB
+	safeQueries *database.SafeQueryBuilder
 }
 
 func NewFileRepository(dbPath string, maxConnections int) (*FileRepository, error) {
@@ -39,7 +41,10 @@ func NewFileRepository(dbPath string, maxConnections int) (*FileRepository, erro
 		}
 	}
 
-	repo := &FileRepository{db: db}
+	repo := &FileRepository{
+		db:          db,
+		safeQueries: database.NewSafeQueryBuilder(),
+	}
 
 	if err := repo.createTables(); err != nil {
 		return nil, err
@@ -310,18 +315,15 @@ func (r *FileRepository) DeleteFile(path string) error {
 }
 
 func (r *FileRepository) DeleteDirectoryRecursive(path string) error {
-	tx, err := r.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	_, err = tx.Exec("DELETE FROM files WHERE path = ? OR path LIKE ?", path, path+"/%")
-	if err != nil {
-		return err
+	// Validate path for SQL safety
+	if err := r.safeQueries.ValidatePathForSQL(path); err != nil {
+		return fmt.Errorf("invalid path for SQL operation: %w", err)
 	}
 
-	return tx.Commit()
+	// Use safe transaction execution
+	return r.safeQueries.ExecuteInTransaction(r.db, func(tx *sql.Tx) error {
+		return r.safeQueries.DeleteDirectoryRecursive(tx, path)
+	})
 }
 
 func (r *FileRepository) buildPath(parent, name string) string {
@@ -344,26 +346,27 @@ func (r *FileRepository) isDirectory(path string) bool {
 }
 
 func (r *FileRepository) getDirectoryStats(path string) (int64, int64) {
-	var itemCount, totalSize int64
-
-	// Count items
-	r.db.QueryRow("SELECT COUNT(*) FROM files WHERE parent_path = ?", path).Scan(&itemCount)
-
-	// Sum sizes (only files, not directories)
-	r.db.QueryRow("SELECT COALESCE(SUM(size), 0) FROM files WHERE parent_path = ? AND is_directory = FALSE", path).Scan(&totalSize)
+	// Use safe queries to prevent SQL injection
+	itemCount, totalSize, err := r.safeQueries.GetDirectoryStatsSafely(r.db, path)
+	if err != nil {
+		// Log error but return zero values for backwards compatibility
+		return 0, 0
+	}
 
 	return itemCount, totalSize
 }
 
 func (r *FileRepository) updateChildrenPaths(tx *sql.Tx, oldParentPath, newParentPath string) error {
-	query := `
-	UPDATE files 
-	SET path = ? || SUBSTR(path, ?) 
-	WHERE path LIKE ?
-	`
+	// Validate paths for SQL safety
+	if err := r.safeQueries.ValidatePathForSQL(oldParentPath); err != nil {
+		return fmt.Errorf("invalid old parent path for SQL operation: %w", err)
+	}
+	if err := r.safeQueries.ValidatePathForSQL(newParentPath); err != nil {
+		return fmt.Errorf("invalid new parent path for SQL operation: %w", err)
+	}
 
-	_, err := tx.Exec(query, newParentPath, len(oldParentPath)+1, oldParentPath+"/%")
-	return err
+	// Use safe query builder to prevent SQL injection
+	return r.safeQueries.UpdateChildrenPaths(tx, oldParentPath, newParentPath)
 }
 
 func (r *FileRepository) Close() error {
