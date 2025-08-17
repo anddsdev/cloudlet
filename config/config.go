@@ -21,6 +21,19 @@ type Config struct {
 			MaxHeaderBytes    int `yaml:"max_header_bytes"`
 			ReadHeaderTimeout int `yaml:"read_header_timeout"`
 		} `yaml:"timeout"`
+		Upload struct {
+			MaxFilesPerRequest     int   `yaml:"max_files_per_request"`
+			MaxTotalSizePerRequest int64 `yaml:"max_total_size_per_request"`
+			AllowPartialSuccess    bool  `yaml:"allow_partial_success"`
+			EnableBatchProcessing  bool  `yaml:"enable_batch_processing"`
+			BatchSize              int   `yaml:"batch_size"`
+			MaxConcurrentUploads   int   `yaml:"max_concurrent_uploads"`
+			StreamingThreshold     int64 `yaml:"streaming_threshold"`
+			ValidateBeforeUpload   bool  `yaml:"validate_before_upload"`
+			EnableProgressTracking bool  `yaml:"enable_progress_tracking"`
+			CleanupOnFailure       bool  `yaml:"cleanup_on_failure"`
+			RateLimitPerMinute     int   `yaml:"rate_limit_per_minute"`
+		} `yaml:"upload"`
 	} `yaml:"server"`
 
 	Database struct {

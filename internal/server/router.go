@@ -35,6 +35,16 @@ func (r *Router) setupRoutes() {
 	mux.HandleFunc("POST /api/v1/upload/stream", r.withMiddleware(h.UploadStream))
 	mux.HandleFunc("POST /api/v1/upload/chunked", r.withMiddleware(h.UploadChunked))
 	mux.HandleFunc("POST /api/v1/upload/progress", r.withMiddleware(h.UploadWithProgressTracking))
+	
+	// Multiple file upload endpoints
+	mux.HandleFunc("POST /api/v1/upload/multiple", r.withMiddleware(h.UploadMultiple))
+	mux.HandleFunc("POST /api/v1/upload/multiple/validate", r.withMiddleware(h.UploadMultipleValidate))
+	mux.HandleFunc("POST /api/v1/upload/multiple/stream", r.withMiddleware(h.UploadMultipleStream))
+	mux.HandleFunc("POST /api/v1/upload/batch", r.withMiddleware(h.UploadBatch))
+	
+	// Batch progress and control endpoints
+	mux.HandleFunc("GET /api/v1/upload/batch/{batchId}/progress", r.withMiddleware(h.GetBatchProgress))
+	mux.HandleFunc("DELETE /api/v1/upload/batch/{batchId}", r.withMiddleware(h.CancelBatchUpload))
 	mux.HandleFunc("GET /api/v1/download/{path}", r.withMiddleware(h.Download))
 
 	// Directories operations
