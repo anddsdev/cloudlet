@@ -9,22 +9,29 @@ import (
 
 	"github.com/anddsdev/cloudlet/internal/models"
 	"github.com/anddsdev/cloudlet/internal/repository"
+	"github.com/anddsdev/cloudlet/internal/security"
 )
 
 type FileService struct {
-	repo    *repository.FileRepository
-	storage *StorageService
+	repo          *repository.FileRepository
+	storage       *StorageService
+	pathValidator *security.PathValidator
 }
 
-func NewFileService(repo *repository.FileRepository, storage *StorageService) *FileService {
+func NewFileService(repo *repository.FileRepository, storage *StorageService, storagePath string) *FileService {
 	return &FileService{
-		repo:    repo,
-		storage: storage,
+		repo:          repo,
+		storage:       storage,
+		pathValidator: security.NewPathValidator(storagePath),
 	}
 }
 
 func (s *FileService) GetDirectoryListing(path string) (*models.DirectoryListing, error) {
-	path = s.normalizePath(path)
+	validatedPath, err := s.pathValidator.ValidateAndNormalizePath(path)
+	if err != nil {
+		return nil, fmt.Errorf("invalid path: %w", err)
+	}
+	path = validatedPath
 
 	files, err := s.repo.GetFilesByPath(path)
 	if err != nil {
@@ -61,7 +68,17 @@ func (s *FileService) GetDirectoryListing(path string) (*models.DirectoryListing
 }
 
 func (s *FileService) CreateDirectory(name, parentPath string) (*models.FileInfo, error) {
-	parentPath = s.normalizePath(parentPath)
+	// Validate filename
+	if err := security.IsValidFilename(name); err != nil {
+		return nil, fmt.Errorf("invalid directory name: %w", err)
+	}
+
+	// Validate and normalize parent path
+	validatedParentPath, err := s.pathValidator.ValidateAndNormalizePath(parentPath)
+	if err != nil {
+		return nil, fmt.Errorf("invalid parent path: %w", err)
+	}
+	parentPath = validatedParentPath
 
 	if !s.isValidName(name) {
 		return nil, errors.New("invalid directory name")
@@ -83,12 +100,18 @@ func (s *FileService) CreateDirectory(name, parentPath string) (*models.FileInfo
 }
 
 func (s *FileService) SaveFile(filename, parentPath string, data []byte) error {
-	parentPath = s.normalizePath(parentPath)
-	fullPath := s.buildPath(parentPath, filename)
-
-	if !s.isValidName(filename) {
-		return errors.New("invalid filename")
+	// Validate filename
+	if err := security.IsValidFilename(filename); err != nil {
+		return fmt.Errorf("invalid filename: %w", err)
 	}
+
+	// Validate and normalize parent path
+	validatedParentPath, err := s.pathValidator.ValidateAndNormalizePath(parentPath)
+	if err != nil {
+		return fmt.Errorf("invalid parent path: %w", err)
+	}
+	parentPath = validatedParentPath
+	fullPath := s.buildPath(parentPath, filename)
 
 	if err := s.storage.SaveFile(fullPath, data); err != nil {
 		return err
@@ -107,6 +130,13 @@ func (s *FileService) SaveFile(filename, parentPath string, data []byte) error {
 }
 
 func (s *FileService) GetFileData(path string) ([]byte, *models.FileInfo, error) {
+	// Validate and normalize path
+	validatedPath, err := s.pathValidator.ValidateAndNormalizePath(path)
+	if err != nil {
+		return nil, nil, fmt.Errorf("invalid path: %w", err)
+	}
+	path = validatedPath
+
 	fileInfo, err := s.repo.GetFileByPath(path)
 	if err != nil {
 		return nil, nil, ErrFileNotFound
@@ -127,9 +157,17 @@ func (s *FileService) GetFileData(path string) ([]byte, *models.FileInfo, error)
 }
 
 func (s *FileService) RenameFile(path, newName string) error {
-	if !s.isValidName(newName) {
-		return errors.New("invalid name")
+	// Validate new filename
+	if err := security.IsValidFilename(newName); err != nil {
+		return fmt.Errorf("invalid new name: %w", err)
 	}
+
+	// Validate and normalize path
+	validatedPath, err := s.pathValidator.ValidateAndNormalizePath(path)
+	if err != nil {
+		return fmt.Errorf("invalid path: %w", err)
+	}
+	path = validatedPath
 
 	fileInfo, err := s.repo.GetFileByPath(path)
 	if err != nil {
@@ -156,8 +194,19 @@ func (s *FileService) RenameFile(path, newName string) error {
 }
 
 func (s *FileService) MoveFile(sourcePath, destinationPath string) error {
-	sourcePath = s.normalizePath(sourcePath)
-	destinationPath = s.normalizePath(destinationPath)
+	// Validate and normalize source path
+	validatedSourcePath, err := s.pathValidator.ValidateAndNormalizePath(sourcePath)
+	if err != nil {
+		return fmt.Errorf("invalid source path: %w", err)
+	}
+	sourcePath = validatedSourcePath
+
+	// Validate and normalize destination path
+	validatedDestinationPath, err := s.pathValidator.ValidateAndNormalizePath(destinationPath)
+	if err != nil {
+		return fmt.Errorf("invalid destination path: %w", err)
+	}
+	destinationPath = validatedDestinationPath
 
 	sourceInfo, err := s.repo.GetFileByPath(sourcePath)
 	if err != nil {
@@ -184,7 +233,14 @@ func (s *FileService) MoveFile(sourcePath, destinationPath string) error {
 }
 
 func (s *FileService) DeleteFile(path string) error {
-	_, err := s.repo.GetFileByPath(path)
+	// Validate and normalize path
+	validatedPath, err := s.pathValidator.ValidateAndNormalizePath(path)
+	if err != nil {
+		return fmt.Errorf("invalid path: %w", err)
+	}
+	path = validatedPath
+
+	_, err = s.repo.GetFileByPath(path)
 	if err != nil {
 		return ErrFileNotFound
 	}
@@ -207,17 +263,16 @@ func (s *FileService) DeleteFile(path string) error {
 	return nil
 }
 
+// normalizePath is now deprecated - use pathValidator.ValidateAndNormalizePath instead
+// Kept for compatibility but should not be used
 func (s *FileService) normalizePath(path string) string {
-	if path == "" || path == "/" {
+	validated, err := s.pathValidator.ValidateAndNormalizePath(path)
+	if err != nil {
+		// For backwards compatibility, return "/" for invalid paths
+		// In production, this should return an error
 		return "/"
 	}
-
-	path = filepath.Clean(path)
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-
-	return path
+	return validated
 }
 
 func (s *FileService) buildPath(parent, name string) string {
@@ -264,21 +319,10 @@ func (s *FileService) generateBreadcrumbs(path string) []models.Breadcrumb {
 	return breadcrumbs
 }
 
+// isValidName is now deprecated - use security.IsValidFilename instead
+// Kept for compatibility but should not be used
 func (s *FileService) isValidName(name string) bool {
-	if name == "" || name == "." || name == ".." {
-		return false
-	}
-
-	// Verify characters dangerous
-	if strings.Contains(name, "/") || strings.Contains(name, "\\") {
-		return false
-	}
-
-	if len(name) > 255 {
-		return false
-	}
-
-	return true
+	return security.IsValidFilename(name) == nil
 }
 
 func (s *FileService) detectMimeType(filename string) string {

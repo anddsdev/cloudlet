@@ -29,7 +29,7 @@ func main() {
 	defer repo.Close()
 
 	storageService := services.NewStorageService(cfg.Server.Storage.Path)
-	fileService := services.NewFileService(repo, storageService)
+	fileService := services.NewFileService(repo, storageService, cfg.Server.Storage.Path)
 
 	httpServer := server.NewServer(cfg, fileService)
 
