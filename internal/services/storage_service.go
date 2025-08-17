@@ -2,16 +2,18 @@ package services
 
 import (
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
-	"path/filepath"
 
 	"github.com/anddsdev/cloudlet/internal/security"
+	"github.com/anddsdev/cloudlet/internal/storage"
 )
 
 type StorageService struct {
 	basePath      string
 	pathValidator *security.PathValidator
+	atomicOps     *storage.AtomicFileOperations
 }
 
 func NewStorageService(basePath string) *StorageService {
@@ -20,6 +22,7 @@ func NewStorageService(basePath string) *StorageService {
 	return &StorageService{
 		basePath:      basePath,
 		pathValidator: security.NewPathValidator(basePath),
+		atomicOps:     storage.NewAtomicFileOperations(basePath),
 	}
 }
 
@@ -37,17 +40,7 @@ func (s *StorageService) SaveFile(relativePath string, data []byte) error {
 		return fmt.Errorf("invalid path: %w", err)
 	}
 
-	dir := filepath.Dir(fullPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
-	}
-
-	tempPath := fullPath + ".tmp"
-	if err := os.WriteFile(tempPath, data, 0644); err != nil {
-		return err
-	}
-
-	return os.Rename(tempPath, fullPath)
+	return s.atomicOps.AtomicWriteFile(fullPath, data, 0644)
 }
 
 func (s *StorageService) ReadFile(relativePath string) ([]byte, error) {
@@ -55,7 +48,8 @@ func (s *StorageService) ReadFile(relativePath string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid path: %w", err)
 	}
-	return os.ReadFile(fullPath)
+
+	return s.atomicOps.SafeReadFile(fullPath)
 }
 
 func (s *StorageService) GetFileInfo(relativePath string) (fs.FileInfo, error) {
@@ -77,12 +71,7 @@ func (s *StorageService) MoveFile(oldPath, newPath string) error {
 		return fmt.Errorf("invalid new path: %w", err)
 	}
 
-	dir := filepath.Dir(fullNewPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
-	}
-
-	return os.Rename(fullOldPath, fullNewPath)
+	return s.atomicOps.AtomicMoveFile(fullOldPath, fullNewPath)
 }
 
 func (s *StorageService) DeleteFile(relativePath string) error {
@@ -91,31 +80,45 @@ func (s *StorageService) DeleteFile(relativePath string) error {
 		return fmt.Errorf("invalid path: %w", err)
 	}
 
-	info, err := os.Stat(fullPath)
+	return s.atomicOps.AtomicDeleteFile(fullPath)
+}
+
+// SaveFileStream saves data from an io.Reader atomically (for large files)
+func (s *StorageService) SaveFileStream(relativePath string, reader io.Reader) error {
+	fullPath, err := s.getSecureFullPath(relativePath)
 	if err != nil {
-		return err
+		return fmt.Errorf("invalid path: %w", err)
 	}
 
-	if info.IsDir() {
-		return os.RemoveAll(fullPath)
-	} else {
-		return os.Remove(fullPath)
+	return s.atomicOps.AtomicWriteFileStream(fullPath, reader, 0644)
+}
+
+// OpenFile opens a file for reading safely
+func (s *StorageService) OpenFile(relativePath string) (*os.File, error) {
+	fullPath, err := s.getSecureFullPath(relativePath)
+	if err != nil {
+		return nil, fmt.Errorf("invalid path: %w", err)
 	}
+
+	return s.atomicOps.SafeOpenFile(fullPath)
+}
+
+// GetStats returns statistics about storage operations
+func (s *StorageService) GetStats() map[string]interface{} {
+	stats := s.atomicOps.GetStats()
+	stats["base_path"] = s.basePath
+	return stats
+}
+
+// Close shuts down the storage service and cleans up resources
+func (s *StorageService) Close() error {
+	if s.atomicOps != nil {
+		return s.atomicOps.Close()
+	}
+	return nil
 }
 
 // getSecureFullPath validates and returns the full path safely
 func (s *StorageService) getSecureFullPath(relativePath string) (string, error) {
 	return s.pathValidator.ValidateAndGetFullPath(relativePath)
-}
-
-// getFullPath is now deprecated - use getSecureFullPath instead
-// Kept for compatibility but should not be used
-func (s *StorageService) getFullPath(relativePath string) string {
-	fullPath, err := s.getSecureFullPath(relativePath)
-	if err != nil {
-		// For backwards compatibility, return a safe default
-		// In production, this should return an error
-		return filepath.Join(s.basePath, "invalid")
-	}
-	return fullPath
 }

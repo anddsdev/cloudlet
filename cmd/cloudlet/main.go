@@ -29,6 +29,8 @@ func main() {
 	defer repo.Close()
 
 	storageService := services.NewStorageService(cfg.Server.Storage.Path)
+	defer storageService.Close() // Ensure proper cleanup of atomic operations
+	
 	fileService := services.NewFileService(repo, storageService, cfg.Server.Storage.Path)
 
 	httpServer := server.NewServer(cfg, fileService)
