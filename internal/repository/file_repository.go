@@ -1,0 +1,371 @@
+package repository
+
+import (
+	"database/sql"
+	"fmt"
+
+	"time"
+
+	"github.com/anddsdev/cloudlet/internal/models"
+	_ "github.com/mattn/go-sqlite3"
+)
+
+type FileRepository struct {
+	db *sql.DB
+}
+
+func NewFileRepository(dbPath string, maxConnections int) (*FileRepository, error) {
+	db, err := sql.Open("sqlite3", dbPath+"?cache=shared&mode=rwc")
+	if err != nil {
+		return nil, err
+	}
+
+	db.SetMaxOpenConns(maxConnections)
+	db.SetMaxIdleConns(1)
+	db.SetConnMaxLifetime(time.Hour)
+
+	pragmas := []string{
+		"PRAGMA journal_mode=WAL",
+		"PRAGMA synchronous=NORMAL",
+		"PRAGMA cache_size=10000",
+		"PRAGMA foreign_keys=ON",
+		"PRAGMA temp_store=memory",
+		"PRAGMA mmap_size=268435456",
+	}
+
+	for _, pragma := range pragmas {
+		if _, err := db.Exec(pragma); err != nil {
+			return nil, err
+		}
+	}
+
+	repo := &FileRepository{db: db}
+
+	if err := repo.createTables(); err != nil {
+		return nil, err
+	}
+
+	return repo, nil
+}
+
+func (r *FileRepository) createTables() error {
+	query := `
+	CREATE TABLE IF NOT EXISTS files (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT NOT NULL,
+		path TEXT UNIQUE NOT NULL,
+		size INTEGER NOT NULL DEFAULT 0,
+		mime_type TEXT NOT NULL DEFAULT '',
+		is_directory BOOLEAN NOT NULL DEFAULT FALSE,
+		parent_path TEXT NOT NULL DEFAULT '',
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		
+		-- Constraints para integridad
+		CONSTRAINT valid_path CHECK (path != ''),
+		CONSTRAINT valid_name CHECK (name != '')
+	);
+	
+	-- Índices optimizados para queries frecuentes
+	CREATE INDEX IF NOT EXISTS idx_parent_path ON files(parent_path);
+	CREATE INDEX IF NOT EXISTS idx_path ON files(path);
+	CREATE INDEX IF NOT EXISTS idx_name ON files(name);
+	CREATE INDEX IF NOT EXISTS idx_is_directory ON files(is_directory);
+	CREATE INDEX IF NOT EXISTS idx_parent_directory ON files(parent_path, is_directory);
+	
+	-- Trigger para actualizar updated_at automáticamente
+	CREATE TRIGGER IF NOT EXISTS update_timestamp 
+	AFTER UPDATE ON files
+	BEGIN
+		UPDATE files SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+	END;
+	`
+
+	_, err := r.db.Exec(query)
+	return err
+}
+
+func (r *FileRepository) GetFilesByPath(parentPath string) ([]*models.FileInfo, error) {
+	query := `
+	SELECT id, name, path, size, mime_type, is_directory, parent_path, created_at, updated_at
+	FROM files 
+	WHERE parent_path = ? 
+	ORDER BY is_directory DESC, LOWER(name) ASC
+	`
+
+	rows, err := r.db.Query(query, parentPath)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var files []*models.FileInfo
+	for rows.Next() {
+		file := &models.FileInfo{}
+		err := rows.Scan(
+			&file.ID, &file.Name, &file.Path, &file.Size,
+			&file.MimeType, &file.IsDirectory, &file.ParentPath,
+			&file.CreatedAt, &file.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		// If it's a directory, calculate statistics
+		if file.IsDirectory {
+			file.ItemCount, file.TotalSize = r.getDirectoryStats(file.Path)
+		}
+
+		files = append(files, file)
+	}
+
+	return files, nil
+}
+
+func (r *FileRepository) GetFileByPath(path string) (*models.FileInfo, error) {
+	query := `
+	SELECT id, name, path, size, mime_type, is_directory, parent_path, created_at, updated_at
+	FROM files WHERE path = ?
+	`
+
+	file := &models.FileInfo{}
+	err := r.db.QueryRow(query, path).Scan(
+		&file.ID, &file.Name, &file.Path, &file.Size,
+		&file.MimeType, &file.IsDirectory, &file.ParentPath,
+		&file.CreatedAt, &file.UpdatedAt,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// If it's a directory, get statistics
+	if file.IsDirectory {
+		file.ItemCount, file.TotalSize = r.getDirectoryStats(file.Path)
+	}
+
+	return file, nil
+}
+
+func (r *FileRepository) InsertFile(file *models.FileInfo) error {
+	query := `
+	INSERT INTO files (name, path, size, mime_type, is_directory, parent_path)
+	VALUES (?, ?, ?, ?, ?, ?)
+	`
+
+	result, err := r.db.Exec(query,
+		file.Name, file.Path, file.Size, file.MimeType,
+		file.IsDirectory, file.ParentPath,
+	)
+	if err != nil {
+		return err
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+
+	file.ID = id
+	return nil
+}
+
+func (r *FileRepository) CreateDirectory(name, parentPath string) (*models.FileInfo, error) {
+	fullPath := r.buildPath(parentPath, name)
+
+	if r.pathExists(fullPath) {
+		return nil, fmt.Errorf("directory already exists: %s", fullPath)
+	}
+
+	if parentPath != "/" && !r.pathExists(parentPath) {
+		return nil, fmt.Errorf("parent directory does not exist: %s", parentPath)
+	}
+
+	dir := &models.FileInfo{
+		Name:        name,
+		Path:        fullPath,
+		Size:        0,
+		MimeType:    "inode/directory",
+		IsDirectory: true,
+		ParentPath:  parentPath,
+	}
+
+	err := r.InsertFile(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	return dir, nil
+}
+
+func (r *FileRepository) RenameFile(oldPath, newName string) error {
+	file, err := r.GetFileByPath(oldPath)
+	if err != nil {
+		return err
+	}
+
+	newPath := r.buildPath(file.ParentPath, newName)
+
+	if r.pathExists(newPath) {
+		return fmt.Errorf("file already exists: %s", newPath)
+	}
+
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Update the file/directory
+	_, err = tx.Exec("UPDATE files SET name = ?, path = ? WHERE path = ?", newName, newPath, oldPath)
+	if err != nil {
+		return err
+	}
+
+	// If it's a directory, update all children recursively
+	if file.IsDirectory {
+		err = r.updateChildrenPaths(tx, oldPath, newPath)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+func (r *FileRepository) MoveFile(sourcePath, destinationPath string) error {
+
+	sourceFile, err := r.GetFileByPath(sourcePath)
+	if err != nil {
+		return err
+	}
+
+	if destinationPath != "/" && !r.isDirectory(destinationPath) {
+		return fmt.Errorf("destination is not a directory: %s", destinationPath)
+	}
+
+	newPath := r.buildPath(destinationPath, sourceFile.Name)
+
+	if r.pathExists(newPath) {
+		return fmt.Errorf("file already exists at destination: %s", newPath)
+	}
+
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec("UPDATE files SET path = ?, parent_path = ? WHERE path = ?",
+		newPath, destinationPath, sourcePath)
+	if err != nil {
+		return err
+	}
+
+	if sourceFile.IsDirectory {
+		err = r.updateChildrenPaths(tx, sourcePath, newPath)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+func (r *FileRepository) DeleteFile(path string) error {
+
+	file, err := r.GetFileByPath(path)
+	if err != nil {
+		return err
+	}
+
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// If it's a directory, check if it's empty or delete recursively
+	if file.IsDirectory {
+		// Count children
+		var count int
+		err = tx.QueryRow("SELECT COUNT(*) FROM files WHERE parent_path = ?", path).Scan(&count)
+		if err != nil {
+			return err
+		}
+
+		// For MVP, only allow deleting empty directories
+		// In the future, add recursive deletion
+		if count > 0 {
+			return fmt.Errorf("directory not empty: %s", path)
+		}
+	}
+
+	_, err = tx.Exec("DELETE FROM files WHERE path = ?", path)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (r *FileRepository) DeleteDirectoryRecursive(path string) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec("DELETE FROM files WHERE path = ? OR path LIKE ?", path, path+"/%")
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (r *FileRepository) buildPath(parent, name string) string {
+	if parent == "/" {
+		return "/" + name
+	}
+	return parent + "/" + name
+}
+
+func (r *FileRepository) pathExists(path string) bool {
+	var count int
+	r.db.QueryRow("SELECT COUNT(*) FROM files WHERE path = ?", path).Scan(&count)
+	return count > 0
+}
+
+func (r *FileRepository) isDirectory(path string) bool {
+	var isDir bool
+	err := r.db.QueryRow("SELECT is_directory FROM files WHERE path = ?", path).Scan(&isDir)
+	return err == nil && isDir
+}
+
+func (r *FileRepository) getDirectoryStats(path string) (int64, int64) {
+	var itemCount, totalSize int64
+
+	// Count items
+	r.db.QueryRow("SELECT COUNT(*) FROM files WHERE parent_path = ?", path).Scan(&itemCount)
+
+	// Sum sizes (only files, not directories)
+	r.db.QueryRow("SELECT COALESCE(SUM(size), 0) FROM files WHERE parent_path = ? AND is_directory = FALSE", path).Scan(&totalSize)
+
+	return itemCount, totalSize
+}
+
+func (r *FileRepository) updateChildrenPaths(tx *sql.Tx, oldParentPath, newParentPath string) error {
+	query := `
+	UPDATE files 
+	SET path = ? || SUBSTR(path, ?) 
+	WHERE path LIKE ?
+	`
+
+	_, err := tx.Exec(query, newParentPath, len(oldParentPath)+1, oldParentPath+"/%")
+	return err
+}
+
+func (r *FileRepository) Close() error {
+	return r.db.Close()
+}

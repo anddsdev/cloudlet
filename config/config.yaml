@@ -1,0 +1,15 @@
+server:
+  port: 8080
+  storage:
+    path: ./storage
+  timeout:
+    read_timeout: 30
+    write_timeout: 30
+    idle_timeout: 60
+    max_header_bytes: 1024
+    read_header_timeout: 10
+
+database:
+  driver: sqlite3
+  dsn: ./data/cloudlet.db
+  max_conn: 10
