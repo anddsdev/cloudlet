@@ -28,6 +28,12 @@ func (r *Router) setupRoutes() {
 
 	mux.HandleFunc("GET /health", r.withMiddleware(h.HealthCheck))
 
+	mux.HandleFunc("GET /api/v1/files", r.withMiddleware(h.ListFiles))
+	mux.HandleFunc("GET /api/v1/files/{path}", r.withMiddleware(h.ListFiles))
+	mux.HandleFunc("DELETE /api/v1/files", r.withMiddleware(h.DeleteFile))
+	mux.HandleFunc("POST /api/v1/upload", r.withMiddleware(h.Upload))
+	mux.HandleFunc("GET /api/v1/download/{path}", r.withMiddleware(h.Download))
+
 	fs := http.FileServer(http.Dir("./web/"))
 	mux.Handle("/", r.withMiddleware(http.StripPrefix("/", fs).ServeHTTP))
 

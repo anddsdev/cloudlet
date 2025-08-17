@@ -8,8 +8,10 @@ import (
 
 type Config struct {
 	Server struct {
-		Port    string `yaml:"port"`
-		Storage struct {
+		Port        string `yaml:"port"`
+		MaxMemory   int    `yaml:"max_memory"`
+		MaxFileSize int64  `yaml:"max_file_size"`
+		Storage     struct {
 			Path string `yaml:"path"`
 		} `yaml:"storage"`
 		Timeout struct {
