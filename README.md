@@ -14,10 +14,22 @@ A lightweight, self-hosted file storage service designed to be simple, fast, and
 - 📊 **Statistics**: View file information, directory sizes, and item counts
 - 🗂️ **Multiple File Types**: Support for various file formats with MIME type detection
 - ⚡ **High Performance**: Built with Go for speed and efficiency
-- 🛡️ **Security**: Input validation and secure file handling
+- 🛡️ **Advanced Security**: 
+  - Path validation with directory traversal protection
+  - SQL injection prevention with SafeQueryBuilder
+  - Dangerous file detection and validation
+  - Enhanced input validation and sanitization
+- 🚀 **Multiple Upload Options**:
+  - Traditional single file uploads
+  - Multiple file upload with batch processing
+  - Streaming uploads for large files
+  - Chunked uploads with progress tracking
+  - Concurrent and sequential processing strategies
+- 🔒 **Atomic Operations**: Thread-safe file operations with data integrity guarantees
 - 🐳 **Easy Deployment**: Simple configuration and deployment
 - 💾 **SQLite Database**: Lightweight database with optimized queries
 - 🌐 **REST API**: Complete RESTful API for integration
+- 🧪 **Comprehensive Testing**: Extensive test coverage with benchmarks
 
 ## 🚀 Quick Start
 
@@ -70,13 +82,26 @@ server:
   max_memory: 32000000 # 32MB
   max_file_size: 100000000 # 100MB
   storage:
-    path: ./storage
+    path: ./data/storage
   timeout:
     read_timeout: 30
     write_timeout: 30
     idle_timeout: 60
     max_header_bytes: 1024
     read_header_timeout: 10
+  
+  upload:
+    max_files_per_request: 50
+    max_total_size_per_request: 524288000 # 500MB in bytes
+    allow_partial_success: true        
+    enable_batch_processing: true      
+    batch_size: 10          
+    max_concurrent_uploads: 3
+    streaming_threshold: 10485760 # 10MB in bytes
+    validate_before_upload: true
+    enable_progress_tracking: false
+    cleanup_on_failure: false    
+    rate_limit_per_minute: 100
 
 database:
   driver: sqlite3
@@ -86,14 +111,28 @@ database:
 
 ### Configuration Options
 
-| Option                 | Description                     | Default              |
-| ---------------------- | ------------------------------- | -------------------- |
-| `server.port`          | HTTP server port                | `8080`               |
-| `server.max_memory`    | Maximum memory for file uploads | `32MB`               |
-| `server.max_file_size` | Maximum file size allowed       | `100MB`              |
-| `server.storage.path`  | Physical storage directory      | `./storage`          |
-| `database.dsn`         | SQLite database file path       | `./data/cloudlet.db` |
-| `database.max_conn`    | Maximum database connections    | `10`                 |
+| Option                                      | Description                                | Default              |
+| ------------------------------------------- | ------------------------------------------ | -------------------- |
+| `server.port`                               | HTTP server port                           | `8080`               |
+| `server.max_memory`                         | Maximum memory for file uploads            | `32MB`               |
+| `server.max_file_size`                      | Maximum file size allowed                  | `100MB`              |
+| `server.storage.path`                       | Physical storage directory                 | `./data/storage`     |
+| `server.timeout.read_timeout`               | HTTP read timeout (seconds)                | `30`                 |
+| `server.timeout.write_timeout`              | HTTP write timeout (seconds)               | `30`                 |
+| `server.timeout.idle_timeout`               | HTTP idle timeout (seconds)                | `60`                 |
+| `server.upload.max_files_per_request`       | Maximum files per upload request           | `50`                 |
+| `server.upload.max_total_size_per_request`  | Maximum total size per request             | `500MB`              |
+| `server.upload.allow_partial_success`       | Allow partial upload success               | `true`               |
+| `server.upload.enable_batch_processing`     | Enable batch processing                    | `true`               |
+| `server.upload.batch_size`                  | Batch size for processing                  | `10`                 |
+| `server.upload.max_concurrent_uploads`      | Maximum concurrent uploads                 | `3`                  |
+| `server.upload.streaming_threshold`         | File size threshold for streaming          | `10MB`               |
+| `server.upload.validate_before_upload`      | Validate files before upload               | `true`               |
+| `server.upload.enable_progress_tracking`    | Enable upload progress tracking            | `false`              |
+| `server.upload.cleanup_on_failure`          | Clean up files on upload failure          | `false`              |
+| `server.upload.rate_limit_per_minute`       | Upload rate limit per minute               | `100`                |
+| `database.dsn`                              | SQLite database file path                  | `./data/cloudlet.db` |
+| `database.max_conn`                         | Maximum database connections               | `10`                 |
 
 ## 📖 API Documentation
 
@@ -101,13 +140,18 @@ database:
 
 #### Files
 
-| Method   | Endpoint                  | Description                      |
-| -------- | ------------------------- | -------------------------------- |
-| `GET`    | `/api/v1/files`           | List files in root directory     |
-| `GET`    | `/api/v1/files/{path}`    | List files in specific directory |
-| `POST`   | `/api/v1/upload`          | Upload files                     |
-| `GET`    | `/api/v1/download/{path}` | Download a file                  |
-| `DELETE` | `/api/v1/files`           | Delete a file                    |
+| Method   | Endpoint                        | Description                      |
+| -------- | ------------------------------- | -------------------------------- |
+| `GET`    | `/api/v1/files`                 | List files in root directory     |
+| `GET`    | `/api/v1/files/{path}`          | List files in specific directory |
+| `POST`   | `/api/v1/upload`                | Upload single file               |
+| `POST`   | `/api/v1/upload/multiple`       | Upload multiple files            |
+| `POST`   | `/api/v1/upload/batch`          | Batch upload with validation     |
+| `POST`   | `/api/v1/upload/stream`         | Streaming upload for large files |
+| `POST`   | `/api/v1/upload/chunked`        | Chunked upload with progress     |
+| `POST`   | `/api/v1/upload/progress`       | Upload with progress tracking    |
+| `GET`    | `/api/v1/download/{path}`       | Download a file                  |
+| `DELETE` | `/api/v1/files`                 | Delete a file                    |
 
 #### Directories
 
@@ -131,13 +175,32 @@ database:
 
 ### Request/Response Examples
 
-#### Upload a file
+#### Upload a single file
 
 ```bash
 curl -X POST \
   -F "file=@example.txt" \
   -F "path=/" \
   http://localhost:8080/api/v1/upload
+```
+
+#### Upload multiple files
+
+```bash
+curl -X POST \
+  -F "files=@file1.txt" \
+  -F "files=@file2.txt" \
+  -F "path=/" \
+  http://localhost:8080/api/v1/upload/multiple
+```
+
+#### Streaming upload for large files
+
+```bash
+curl -X POST \
+  -F "file=@largefile.zip" \
+  -F "path=/" \
+  http://localhost:8080/api/v1/upload/stream
 ```
 
 #### Create a directory
@@ -179,23 +242,60 @@ cloudlet/
 ├── cmd/cloudlet/           # Application entry point
 ├── config/                 # Configuration management
 ├── internal/
-│   ├── handlers/          # HTTP handlers
+│   ├── database/          # Database utilities and SafeQueryBuilder
+│   ├── handlers/          # HTTP handlers (including specialized upload handlers)
 │   ├── models/            # Data models
 │   ├── repository/        # Data access layer
+│   ├── security/          # Security components (PathValidator)
 │   ├── server/            # HTTP server and routing
 │   ├── services/          # Business logic
-│   └── utils/             # Utility functions
+│   ├── storage/           # AtomicFileOperations
+│   ├── transaction/       # TransactionManager
+│   └── utils/             # Utility functions and validators
 ├── data/                  # SQLite database
 └── storage/               # File storage directory
 ```
 
 ### Key Components
 
-- **Handlers**: Process HTTP requests and responses
+- **Handlers**: Process HTTP requests and responses with specialized upload handlers
 - **Services**: Contain business logic and orchestrate operations
-- **Repository**: Handle database operations with SQLite
-- **Storage Service**: Manage physical file operations
+  - **FileService**: Core file management with atomic operations
+  - **MultipleUploadService**: Handles batch and concurrent uploads
+  - **StorageService**: Physical file operations with atomic guarantees
+- **Repository**: Handle database operations with SQLite and SafeQueryBuilder
+- **Security**: 
+  - **PathValidator**: Prevents directory traversal attacks
+  - **SafeQueryBuilder**: SQL injection prevention
+  - **Validator**: Enhanced input validation and sanitization
+- **Storage**: **AtomicFileOperations**: Thread-safe file operations
+- **Transaction**: **TransactionManager**: Ensures data consistency
 - **Models**: Define data structures and API contracts
+
+## 🔐 Security & Performance
+
+### Security Features
+
+- **Path Validation**: Comprehensive protection against directory traversal attacks
+- **SQL Injection Prevention**: SafeQueryBuilder ensures all database queries are secure
+- **File Validation**: Detection and prevention of dangerous file uploads
+- **Input Sanitization**: Enhanced validation across all endpoints
+- **Atomic Operations**: Thread-safe file operations prevent race conditions
+
+### Performance Optimizations
+
+- **Streaming Uploads**: Handle large files efficiently without memory overhead
+- **Chunked Processing**: Break large operations into manageable chunks
+- **Concurrent Operations**: Parallel processing for multiple file operations
+- **Batch Processing**: Optimize multiple file uploads with intelligent batching
+- **Transaction Management**: Ensure database consistency with proper rollback capabilities
+
+### Testing & Quality
+
+- **Comprehensive Test Suite**: Over 5,800 lines of test coverage
+- **Benchmark Tests**: Performance validation for critical operations
+- **Mock Services**: Robust testing infrastructure
+- **Edge Case Validation**: Security testing against various attack vectors
 
 ## 🤝 Contributing
 
