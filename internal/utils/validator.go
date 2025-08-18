@@ -8,7 +8,9 @@ import (
 
 var (
 	// Enhanced regex for valid file names - more permissive but still secure
-	validFilenameRegex = regexp.MustCompile(`^[a-zA-Z0-9._\-\s\(\)\[\]]+$`)
+	// Excludes control characters and other dangerous characters
+	// Use space instead of \s to avoid matching control characters
+	validFilenameRegex = regexp.MustCompile(`^[a-zA-Z0-9._\- \(\)\[\]]+$`)
 
 	// Extensions considered dangerous
 	dangerousExtensions = map[string]bool{
@@ -40,7 +42,7 @@ func IsValidFilename(filename string) bool {
 	}
 
 	// Check for path separators and other dangerous characters
-	dangerousChars := []string{"/", "\\", ":", "*", "?", "\"", "<", ">", "|", "\x00"}
+	dangerousChars := []string{"/", "\\", ":", "*", "?", "\"", "<", ">", "|", "\x00", "\r", "\n", "\t"}
 	for _, char := range dangerousChars {
 		if strings.Contains(filename, char) {
 			return false

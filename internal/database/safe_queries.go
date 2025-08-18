@@ -49,21 +49,31 @@ func (sqb *SafeQueryBuilder) UpdateChildrenPaths(tx *sql.Tx, oldParentPath, newP
 	// Escape the old parent path to prevent SQL injection
 	safePattern := sqb.BuildSafeLikePattern(oldParentPath, "/%")
 	
-	// Use CASE to safely replace the path prefix
+	// Use CASE to safely replace both path and parent_path
 	// This approach is safer than string concatenation with SUBSTR
 	query := `
 	UPDATE files 
 	SET path = CASE 
 		WHEN path LIKE ? ESCAPE '\' THEN ? || SUBSTR(path, ?)
 		ELSE path
+	END,
+	parent_path = CASE 
+		WHEN parent_path LIKE ? ESCAPE '\' THEN ? || SUBSTR(parent_path, ?)
+		WHEN parent_path = ? THEN ?
+		ELSE parent_path
 	END
 	WHERE path LIKE ? ESCAPE '\'
 	`
 	
 	_, err := tx.Exec(query, 
-		safePattern,                    // LIKE pattern for matching
-		newParentPath,                  // New prefix
-		len(oldParentPath)+1,          // Start position for SUBSTR
+		safePattern,                    // LIKE pattern for matching path
+		newParentPath,                  // New prefix for path
+		len(oldParentPath)+1,          // Start position for SUBSTR path
+		safePattern,                    // LIKE pattern for matching parent_path
+		newParentPath,                  // New prefix for parent_path
+		len(oldParentPath)+1,          // Start position for SUBSTR parent_path
+		oldParentPath,                  // Direct parent_path match
+		newParentPath,                  // New parent_path value
 		safePattern,                   // WHERE condition pattern
 	)
 	return err
