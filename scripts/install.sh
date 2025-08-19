@@ -117,7 +117,7 @@ configure_environment() {
     # Create .env file based on selection
     case $ENV_TYPE in
         1) # Development
-            cat > .env << EOF
+            cat > .env << 'EOF'
 CLOUDLET_PORT=$PORT
 MAX_FILE_SIZE=50000000
 MAX_MEMORY=32000000
@@ -131,7 +131,7 @@ EOF
             ;;
             
         2) # Production
-            cat > .env << EOF
+            cat > .env << 'EOF'
 CLOUDLET_PORT=$PORT
 MAX_FILE_SIZE=1000000000
 MAX_MEMORY=64000000
@@ -147,7 +147,7 @@ EOF
             ;;
             
         3) # High volume
-            cat > .env << EOF
+            cat > .env << 'EOF'
 CLOUDLET_PORT=$PORT
 MAX_FILE_SIZE=2000000000
 MAX_MEMORY=128000000
@@ -171,6 +171,11 @@ EOF
             read -p "Press Enter when you have finished editing..."
             ;;
     esac
+    
+    # Replace $PORT variable in .env file
+    if [ "$ENV_TYPE" != "4" ]; then
+        sed -i "s/\$PORT/$PORT/g" .env
+    fi
 }
 
 install_service() {
