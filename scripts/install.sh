@@ -118,49 +118,49 @@ configure_environment() {
     case $ENV_TYPE in
         1) # Development
             cat > .env << EOF
-                    CLOUDLET_PORT=$PORT
-                    MAX_FILE_SIZE=50000000
-                    MAX_MEMORY=32000000
-                    ENABLE_PROGRESS_TRACKING=true
-                    CLEANUP_ON_FAILURE=true
-                    RATE_LIMIT_PER_MINUTE=100
-                    CONTAINER_MEMORY_LIMIT=512M
-                    CONTAINER_CPU_LIMIT=1.0
-                EOF
+CLOUDLET_PORT=$PORT
+MAX_FILE_SIZE=50000000
+MAX_MEMORY=32000000
+ENABLE_PROGRESS_TRACKING=true
+CLEANUP_ON_FAILURE=true
+RATE_LIMIT_PER_MINUTE=100
+CONTAINER_MEMORY_LIMIT=512M
+CONTAINER_CPU_LIMIT=1.0
+EOF
             log_success "Development configuration applied"
             ;;
             
         2) # Production
             cat > .env << EOF
-                    CLOUDLET_PORT=$PORT
-                    MAX_FILE_SIZE=1000000000
-                    MAX_MEMORY=64000000
-                    MAX_CONCURRENT_UPLOADS=10
-                    RATE_LIMIT_PER_MINUTE=500
-                    VALIDATE_BEFORE_UPLOAD=true
-                    CLEANUP_ON_FAILURE=true
-                    CONTAINER_MEMORY_LIMIT=2G
-                    CONTAINER_CPU_LIMIT=2.0
-                    DB_MAX_CONN=25
-                EOF
+CLOUDLET_PORT=$PORT
+MAX_FILE_SIZE=1000000000
+MAX_MEMORY=64000000
+MAX_CONCURRENT_UPLOADS=10
+RATE_LIMIT_PER_MINUTE=500
+VALIDATE_BEFORE_UPLOAD=true
+CLEANUP_ON_FAILURE=true
+CONTAINER_MEMORY_LIMIT=2G
+CONTAINER_CPU_LIMIT=2.0
+DB_MAX_CONN=25
+EOF
             log_success "Production configuration applied"
             ;;
             
         3) # High volume
             cat > .env << EOF
-                    CLOUDLET_PORT=$PORT
-                    MAX_FILE_SIZE=2000000000
-                    MAX_MEMORY=128000000
-                    MAX_FILES_PER_REQUEST=100
-                    MAX_TOTAL_SIZE_PER_REQUEST=5368709120
-                    ENABLE_BATCH_PROCESSING=true
-                    BATCH_SIZE=20
-                    MAX_CONCURRENT_UPLOADS=15
-                    RATE_LIMIT_PER_MINUTE=1000
-                    CONTAINER_MEMORY_LIMIT=4G
-                    CONTAINER_CPU_LIMIT=4.0
-                    DB_MAX_CONN=50
-                EOF
+CLOUDLET_PORT=$PORT
+MAX_FILE_SIZE=2000000000
+MAX_MEMORY=128000000
+MAX_FILES_PER_REQUEST=100
+MAX_TOTAL_SIZE_PER_REQUEST=5368709120
+ENABLE_BATCH_PROCESSING=true
+BATCH_SIZE=20
+MAX_CONCURRENT_UPLOADS=15
+RATE_LIMIT_PER_MINUTE=1000
+CONTAINER_MEMORY_LIMIT=4G
+CONTAINER_CPU_LIMIT=4.0
+DB_MAX_CONN=50
+EOF
             log_success "High volume configuration applied"
             ;;
             
