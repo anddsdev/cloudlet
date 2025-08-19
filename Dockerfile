@@ -23,7 +23,7 @@ RUN go mod download && go mod verify
 COPY . .
 
 # Build with production optimizations
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build \
+RUN CGO_ENABLED=1 go build \
     -ldflags='-w -s -extldflags "-static" -X main.version=production -X main.buildTime=$(date -u +%Y%m%d-%H%M%S)' \
     -a -installsuffix cgo \
     -trimpath \
