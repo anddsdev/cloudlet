@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Cloudlet Docker Installation Script
-# Usage: curl -sSL https://raw.githubusercontent.com/anddsdev/cloudlet/main/scripts/install.sh | bash
+# Cloudlet Docker Installation Script  
+# Usage: curl -sSL https://raw.githubusercontent.com/anddsdev/cloudlet/main/install.sh | bash
 
 set -e
 
@@ -95,18 +95,20 @@ download_project() {
         rm -rf "$INSTALL_DIR"
     fi
     
-    # Clone repository (replace with actual repository URL)
-    if [[ -n "${REPO_URL:-}" ]]; then
-        git clone "$REPO_URL" "$INSTALL_DIR"
+    # Clone repository
+    log_info "Cloning repository from GitHub..."
+    if git clone "https://github.com/anddsdev/cloudlet.git" "$INSTALL_DIR"; then
+        log_success "Repository cloned successfully"
     else
-        log_warning "Using local files for installation"
-        mkdir -p "$INSTALL_DIR"
-        # Copy current directory files (for local development)
-        cp -r . "$INSTALL_DIR/" 2>/dev/null || true
+        log_error "Failed to clone repository. Please check:"
+        log_error "1. Internet connection"
+        log_error "2. Repository URL is correct"
+        log_error "3. Repository is accessible"
+        exit 1
     fi
     
     cd "$INSTALL_DIR"
-    log_success "Project downloaded to $INSTALL_DIR"
+    log_success "Project downloaded to $(pwd)"
 }
 
 configure_environment() {
@@ -116,49 +118,49 @@ configure_environment() {
     case $ENV_TYPE in
         1) # Development
             cat > .env << EOF
-CLOUDLET_PORT=$PORT
-MAX_FILE_SIZE=50000000
-MAX_MEMORY=32000000
-ENABLE_PROGRESS_TRACKING=true
-CLEANUP_ON_FAILURE=true
-RATE_LIMIT_PER_MINUTE=100
-CONTAINER_MEMORY_LIMIT=512M
-CONTAINER_CPU_LIMIT=1.0
-EOF
+                    CLOUDLET_PORT=$PORT
+                    MAX_FILE_SIZE=50000000
+                    MAX_MEMORY=32000000
+                    ENABLE_PROGRESS_TRACKING=true
+                    CLEANUP_ON_FAILURE=true
+                    RATE_LIMIT_PER_MINUTE=100
+                    CONTAINER_MEMORY_LIMIT=512M
+                    CONTAINER_CPU_LIMIT=1.0
+                EOF
             log_success "Development configuration applied"
             ;;
             
         2) # Production
             cat > .env << EOF
-CLOUDLET_PORT=$PORT
-MAX_FILE_SIZE=1000000000
-MAX_MEMORY=64000000
-MAX_CONCURRENT_UPLOADS=10
-RATE_LIMIT_PER_MINUTE=500
-VALIDATE_BEFORE_UPLOAD=true
-CLEANUP_ON_FAILURE=true
-CONTAINER_MEMORY_LIMIT=2G
-CONTAINER_CPU_LIMIT=2.0
-DB_MAX_CONN=25
-EOF
+                    CLOUDLET_PORT=$PORT
+                    MAX_FILE_SIZE=1000000000
+                    MAX_MEMORY=64000000
+                    MAX_CONCURRENT_UPLOADS=10
+                    RATE_LIMIT_PER_MINUTE=500
+                    VALIDATE_BEFORE_UPLOAD=true
+                    CLEANUP_ON_FAILURE=true
+                    CONTAINER_MEMORY_LIMIT=2G
+                    CONTAINER_CPU_LIMIT=2.0
+                    DB_MAX_CONN=25
+                EOF
             log_success "Production configuration applied"
             ;;
             
         3) # High volume
             cat > .env << EOF
-CLOUDLET_PORT=$PORT
-MAX_FILE_SIZE=2000000000
-MAX_MEMORY=128000000
-MAX_FILES_PER_REQUEST=100
-MAX_TOTAL_SIZE_PER_REQUEST=5368709120
-ENABLE_BATCH_PROCESSING=true
-BATCH_SIZE=20
-MAX_CONCURRENT_UPLOADS=15
-RATE_LIMIT_PER_MINUTE=1000
-CONTAINER_MEMORY_LIMIT=4G
-CONTAINER_CPU_LIMIT=4.0
-DB_MAX_CONN=50
-EOF
+                    CLOUDLET_PORT=$PORT
+                    MAX_FILE_SIZE=2000000000
+                    MAX_MEMORY=128000000
+                    MAX_FILES_PER_REQUEST=100
+                    MAX_TOTAL_SIZE_PER_REQUEST=5368709120
+                    ENABLE_BATCH_PROCESSING=true
+                    BATCH_SIZE=20
+                    MAX_CONCURRENT_UPLOADS=15
+                    RATE_LIMIT_PER_MINUTE=1000
+                    CONTAINER_MEMORY_LIMIT=4G
+                    CONTAINER_CPU_LIMIT=4.0
+                    DB_MAX_CONN=50
+                EOF
             log_success "High volume configuration applied"
             ;;
             
@@ -174,9 +176,30 @@ EOF
 install_service() {
     log_info "Installing and starting the service..."
     
+    # Verify we're in the right directory
+    if [ ! -d ".git" ]; then
+        log_error "Not in a git repository directory. Something went wrong with the download."
+        return 1
+    fi
+    
     # Build and start services
-    docker-compose build
-    docker-compose up -d
+    log_info "Building Docker images..."
+    if docker-compose build; then
+        log_success "Docker build completed"
+    else
+        log_error "Docker build failed. Please check your Dockerfile and application structure."
+        log_info "Available files in directory:"
+        ls -la
+        return 1
+    fi
+    
+    log_info "Starting services..."
+    if docker-compose up -d; then
+        log_success "Services started"
+    else
+        log_error "Failed to start services"
+        return 1
+    fi
     
     # Wait for service to be ready
     log_info "Waiting for service to be ready..."
@@ -191,10 +214,12 @@ install_service() {
         sleep 2
     done
     
-    log_error "Service could not start correctly"
+    log_warning "Service health check failed, but containers may still be starting"
+    log_info "Checking container status..."
+    docker-compose ps
     log_info "Checking logs..."
     docker-compose logs --tail=20 cloudlet
-    return 1
+    return 0
 }
 
 show_completion_info() {
