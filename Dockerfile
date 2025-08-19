@@ -23,12 +23,7 @@ RUN go mod download && go mod verify
 COPY . .
 
 # Build with production optimizations
-RUN CGO_ENABLED=1 go build \
-    -ldflags='-w -s -extldflags "-static" -X main.version=production -X main.buildTime=$(date -u +%Y%m%d-%H%M%S)' \
-    -a -installsuffix cgo \
-    -trimpath \
-    -buildmode=exe \
-    -o cloudlet ./cmd/cloudlet
+RUN CGO_ENABLED=1 go build -o cloudlet ./cmd/cloudlet/main.go
 
 # Compress binary for smaller size
 RUN upx --best --lzma cloudlet
