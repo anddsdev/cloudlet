@@ -8,8 +8,7 @@ RUN apk add --no-cache \
     tzdata \
     gcc \
     musl-dev \
-    sqlite-dev \
-    upx
+    sqlite-dev
 
 WORKDIR /build
 
@@ -22,41 +21,40 @@ RUN go mod download && go mod verify
 # Copy source code
 COPY . .
 
-# Build with production optimizations
+# Build with production optimizations (native architecture)
 RUN CGO_ENABLED=1 go build -o cloudlet ./cmd/cloudlet/main.go
 
-# Compress binary for smaller size
-RUN upx --best --lzma cloudlet
-
 # Verify the binary works
-RUN ./cloudlet --version || echo "Binary built successfully"
+RUN ./cloudlet --help || echo "Binary built successfully"
 
-# Production image - using distroless for security
-FROM gcr.io/distroless/static-debian12:nonroot
+# Production image - using Alpine instead of distroless for CGO compatibility
+FROM alpine:3.19
 
-# Copy timezone data from builder
-COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
+# Install runtime dependencies for CGO
+RUN apk --no-cache add \
+    ca-certificates \
+    tzdata \
+    sqlite \
+    && rm -rf /var/cache/apk/*
 
-# Copy CA certificates
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+# Create non-root user
+RUN addgroup -g 1001 -S cloudlet && \
+    adduser -u 1001 -S cloudlet -G cloudlet
 
-# Create necessary directories
-USER root
-RUN ["/busybox/mkdir", "-p", "/app/data/storage", "/app/config", "/app/logs", "/tmp/cloudlet"]
-
-# Set ownership to nonroot user (uid=65532)
-RUN ["/busybox/chown", "-R", "65532:65532", "/app", "/tmp/cloudlet"]
+# Create necessary directories with proper permissions
+RUN mkdir -p /app/data/storage /app/config /app/logs /tmp/cloudlet && \
+    chown -R cloudlet:cloudlet /app /tmp/cloudlet
 
 # Switch to non-root user
-USER 65532:65532
+USER cloudlet
 
 WORKDIR /app
 
 # Copy the optimized binary
-COPY --from=builder --chown=65532:65532 /build/cloudlet ./
+COPY --from=builder --chown=cloudlet:cloudlet /build/cloudlet ./
 
 # Copy default configuration (can be overridden)
-COPY --chown=65532:65532 config/config.yaml config/
+COPY --chown=cloudlet:cloudlet config/config.yaml config/
 
 # Production environment variables with secure defaults
 ENV PORT=8080
@@ -106,9 +104,9 @@ EXPOSE 8080 9090
 # Define volumes for persistence
 VOLUME ["/app/data", "/app/config", "/app/logs"]
 
-# Optimized health check
+# Working health check using wget (available in Alpine)
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
-    CMD ["/app/cloudlet", "healthcheck"] || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT}/health || exit 1
 
 # Use exec form for better signal handling
 CMD ["/app/cloudlet"]
@@ -119,6 +117,6 @@ LABEL \
     org.opencontainers.image.description="Production-ready file upload service" \
     org.opencontainers.image.vendor="Cloudlet" \
     org.opencontainers.image.version="production" \
-    org.opencontainers.image.created="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+    org.opencontainers.image.created="2025-08-18T23:00:00Z" \
     security.non-root="true" \
-    security.readonly-rootfs="true"
+    security.minimal-base="true"
