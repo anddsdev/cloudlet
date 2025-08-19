@@ -1,0 +1,87 @@
+version: "3.8"
+
+services:
+  cloudlet:
+    build: .
+    ports:
+      - "${CLOUDLET_PORT:-8080}:8080"
+    environment:
+      # Server configuration
+      - PORT=${CLOUDLET_PORT:-8080}
+      - DB_DSN=/app/data/cloudlet.db
+      - STORAGE_PATH=/app/data/storage
+
+      # File size limits
+      - MAX_FILE_SIZE=${MAX_FILE_SIZE:-100000000}
+      - MAX_MEMORY=${MAX_MEMORY:-32000000}
+
+      # Timeouts (in seconds)
+      - READ_TIMEOUT=${READ_TIMEOUT:-30}
+      - WRITE_TIMEOUT=${WRITE_TIMEOUT:-30}
+      - IDLE_TIMEOUT=${IDLE_TIMEOUT:-60}
+      - MAX_HEADER_BYTES=${MAX_HEADER_BYTES:-1024}
+      - READ_HEADER_TIMEOUT=${READ_HEADER_TIMEOUT:-10}
+
+      # Upload configuration
+      - MAX_FILES_PER_REQUEST=${MAX_FILES_PER_REQUEST:-50}
+      - MAX_TOTAL_SIZE_PER_REQUEST=${MAX_TOTAL_SIZE_PER_REQUEST:-524288000}
+      - ALLOW_PARTIAL_SUCCESS=${ALLOW_PARTIAL_SUCCESS:-true}
+      - ENABLE_BATCH_PROCESSING=${ENABLE_BATCH_PROCESSING:-true}
+      - BATCH_SIZE=${BATCH_SIZE:-10}
+      - MAX_CONCURRENT_UPLOADS=${MAX_CONCURRENT_UPLOADS:-3}
+      - STREAMING_THRESHOLD=${STREAMING_THRESHOLD:-10485760}
+      - VALIDATE_BEFORE_UPLOAD=${VALIDATE_BEFORE_UPLOAD:-true}
+      - ENABLE_PROGRESS_TRACKING=${ENABLE_PROGRESS_TRACKING:-false}
+      - CLEANUP_ON_FAILURE=${CLEANUP_ON_FAILURE:-false}
+      - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-100}
+
+      # Database configuration
+      - DB_MAX_CONN=${DB_MAX_CONN:-10}
+
+      # Configuration path (fallback to YAML)
+      - CONFIG_PATH=/app/config/config.yaml
+
+    volumes:
+      - cloudlet_data:/app/data
+      - cloudlet_config:/app/config
+      - ./config:/app/config:ro # Mount local configuration as read-only
+
+    restart: unless-stopped
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8080/health",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    networks:
+      - cloudlet_network
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: ${CONTAINER_MEMORY_LIMIT:-512M}
+          cpus: "${CONTAINER_CPU_LIMIT:-1.0}"
+        reservations:
+          memory: ${CONTAINER_MEMORY_RESERVATION:-256M}
+          cpus: "${CONTAINER_CPU_RESERVATION:-0.5}"
+
+volumes:
+  cloudlet_data:
+    driver: local
+  cloudlet_config:
+    driver: local
+
+networks:
+  cloudlet_network:
+    driver: bridge

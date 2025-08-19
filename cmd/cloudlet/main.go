@@ -17,10 +17,17 @@ import (
 )
 
 func main() {
+	// Load configuration from environment variables first, fallback to YAML
 	cfg, err := config.NewConfig("./config/config.yaml")
 	if err != nil {
 		log.Fatalf("error loading config: %v", err)
 	}
+
+	// Log configuration source for debugging
+	log.Printf("Configuration loaded successfully")
+	log.Printf("Server will start on port: %s", cfg.Server.Port)
+	log.Printf("Storage path: %s", cfg.Server.Storage.Path)
+	log.Printf("Database DSN: %s", cfg.Database.DSN)
 
 	repo, err := repository.NewFileRepository(cfg.Database.DSN, cfg.Database.MaxConn)
 	if err != nil {
