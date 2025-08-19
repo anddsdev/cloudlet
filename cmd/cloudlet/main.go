@@ -35,9 +35,14 @@ func main() {
 	}
 	defer repo.Close()
 
+	// Verify that the storage directory exists
+	if err := ensureStorageDirectory(cfg.Server.Storage.Path); err != nil {
+		log.Fatalf("error ensuring storage directory: %v", err)
+	}
+
 	storageService := services.NewStorageService(cfg.Server.Storage.Path)
-	defer storageService.Close() // Ensure proper cleanup of atomic operations
-	
+	defer storageService.Close()
+
 	fileService := services.NewFileService(repo, storageService, cfg.Server.Storage.Path)
 
 	httpServer := server.NewServer(cfg, fileService)
@@ -73,4 +78,15 @@ func main() {
 	}
 
 	log.Println("Server exited cleanly")
+}
+
+// Verify if the storage directory exists, and create it if not
+func ensureStorageDirectory(storagePath string) error {
+	if _, err := os.Stat(storagePath); os.IsNotExist(err) {
+		if err := os.MkdirAll(storagePath, 0755); err != nil {
+			return fmt.Errorf("failed to create storage directory %s: %w", storagePath, err)
+		}
+		log.Printf("Created storage directory: %s", storagePath)
+	}
+	return nil
 }

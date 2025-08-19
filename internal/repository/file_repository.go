@@ -4,8 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 
-	"time"
-
 	"github.com/anddsdev/cloudlet/internal/database"
 	"github.com/anddsdev/cloudlet/internal/models"
 	_ "github.com/mattn/go-sqlite3"
@@ -16,78 +14,30 @@ type FileRepository struct {
 	safeQueries *database.SafeQueryBuilder
 }
 
-func NewFileRepository(dbPath string, maxConnections int) (*FileRepository, error) {
-	db, err := sql.Open("sqlite3", dbPath+"?cache=shared&mode=rwc")
+func NewFileRepository(dsn string, maxConn int) (*FileRepository, error) {
+	initializer := database.NewDatabaseInitializer(dsn)
+	if err := initializer.InitializeDatabase(); err != nil {
+		return nil, fmt.Errorf("failed to initialize database: %w", err)
+	}
+
+	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-	db.SetMaxOpenConns(maxConnections)
-	db.SetMaxIdleConns(1)
-	db.SetConnMaxLifetime(time.Hour)
+	db.SetMaxOpenConns(maxConn)
+	db.SetMaxIdleConns(maxConn / 2)
 
-	pragmas := []string{
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA synchronous=NORMAL",
-		"PRAGMA cache_size=10000",
-		"PRAGMA foreign_keys=ON",
-		"PRAGMA temp_store=memory",
-		"PRAGMA mmap_size=268435456",
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	for _, pragma := range pragmas {
-		if _, err := db.Exec(pragma); err != nil {
-			return nil, err
-		}
-	}
+	fmt.Printf("Database connection established successfully: %s\n", dsn)
 
-	repo := &FileRepository{
-		db:          db,
-		safeQueries: database.NewSafeQueryBuilder(),
-	}
-
-	if err := repo.createTables(); err != nil {
-		return nil, err
-	}
-
-	return repo, nil
-}
-
-func (r *FileRepository) createTables() error {
-	query := `
-	CREATE TABLE IF NOT EXISTS files (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		name TEXT NOT NULL,
-		path TEXT UNIQUE NOT NULL,
-		size INTEGER NOT NULL DEFAULT 0,
-		mime_type TEXT NOT NULL DEFAULT '',
-		is_directory BOOLEAN NOT NULL DEFAULT FALSE,
-		parent_path TEXT NOT NULL DEFAULT '',
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		
-		-- Constraints para integridad
-		CONSTRAINT valid_path CHECK (path != ''),
-		CONSTRAINT valid_name CHECK (name != '')
-	);
-	
-	-- Índices optimizados para queries frecuentes
-	CREATE INDEX IF NOT EXISTS idx_parent_path ON files(parent_path);
-	CREATE INDEX IF NOT EXISTS idx_path ON files(path);
-	CREATE INDEX IF NOT EXISTS idx_name ON files(name);
-	CREATE INDEX IF NOT EXISTS idx_is_directory ON files(is_directory);
-	CREATE INDEX IF NOT EXISTS idx_parent_directory ON files(parent_path, is_directory);
-	
-	-- Trigger para actualizar updated_at automáticamente
-	CREATE TRIGGER IF NOT EXISTS update_timestamp 
-	AFTER UPDATE ON files
-	BEGIN
-		UPDATE files SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
-	END;
-	`
-
-	_, err := r.db.Exec(query)
-	return err
+	return &FileRepository{
+		db: db,
+	}, nil
 }
 
 func (r *FileRepository) GetFilesByPath(parentPath string) ([]*models.FileInfo, error) {
