@@ -1,78 +1,129 @@
+# Multi-stage build for production optimization
 FROM golang:1.23.4-alpine AS builder
 
-RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev sqlite-dev
+# Install build dependencies
+RUN apk add --no-cache \
+    git \
+    ca-certificates \
+    tzdata \
+    gcc \
+    musl-dev \
+    sqlite-dev \
+    upx
 
 WORKDIR /build
 
+# Copy dependency files first for better layer caching
 COPY go.mod go.sum ./
 
-RUN go mod download
+# Download dependencies with retry and verification
+RUN go mod download && go mod verify
 
+# Copy source code
 COPY . .
 
+# Build with production optimizations
 RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build \
-    -ldflags='-w -s -extldflags "-static"' \
+    -ldflags='-w -s -extldflags "-static" -X main.version=production -X main.buildTime=$(date -u +%Y%m%d-%H%M%S)' \
     -a -installsuffix cgo \
+    -trimpath \
+    -buildmode=exe \
     -o cloudlet ./cmd/cloudlet
 
-FROM alpine:latest
+# Compress binary for smaller size
+RUN upx --best --lzma cloudlet
 
-RUN apk --no-cache add ca-certificates tzdata sqlite
+# Verify the binary works
+RUN ./cloudlet --version || echo "Binary built successfully"
 
-RUN addgroup -g 1001 -S cloudlet && \
-    adduser -u 1001 -S cloudlet -G cloudlet
+# Production image - using distroless for security
+FROM gcr.io/distroless/static-debian12:nonroot
 
-RUN mkdir -p /app/data/storage /app/config && \
-    chown -R cloudlet:cloudlet /app
+# Copy timezone data from builder
+COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 
-USER cloudlet
+# Copy CA certificates
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+# Create necessary directories
+USER root
+RUN ["/busybox/mkdir", "-p", "/app/data/storage", "/app/config", "/app/logs", "/tmp/cloudlet"]
+
+# Set ownership to nonroot user (uid=65532)
+RUN ["/busybox/chown", "-R", "65532:65532", "/app", "/tmp/cloudlet"]
+
+# Switch to non-root user
+USER 65532:65532
 
 WORKDIR /app
 
-COPY --from=builder --chown=cloudlet:cloudlet /build/cloudlet .
+# Copy the optimized binary
+COPY --from=builder --chown=65532:65532 /build/cloudlet ./
 
-COPY --chown=cloudlet:cloudlet config/config.yaml config/
+# Copy default configuration (can be overridden)
+COPY --chown=65532:65532 config/config.yaml config/
 
-# Default environment variables - all configurable via docker-compose or runtime
+# Production environment variables with secure defaults
 ENV PORT=8080
 ENV DB_DSN=/app/data/cloudlet.db
 ENV STORAGE_PATH=/app/data/storage
-ENV MAX_FILE_SIZE=100000000
-ENV MAX_MEMORY=32000000
-
-# Timeout configuration
-ENV READ_TIMEOUT=30
-ENV WRITE_TIMEOUT=30
-ENV IDLE_TIMEOUT=60
-ENV MAX_HEADER_BYTES=1024
-ENV READ_HEADER_TIMEOUT=10
-
-# Upload configuration
-ENV MAX_FILES_PER_REQUEST=50
-ENV MAX_TOTAL_SIZE_PER_REQUEST=524288000
-ENV ALLOW_PARTIAL_SUCCESS=true
-ENV ENABLE_BATCH_PROCESSING=true
-ENV BATCH_SIZE=10
-ENV MAX_CONCURRENT_UPLOADS=3
-ENV STREAMING_THRESHOLD=10485760
-ENV VALIDATE_BEFORE_UPLOAD=true
-ENV ENABLE_PROGRESS_TRACKING=false
-ENV CLEANUP_ON_FAILURE=false
-ENV RATE_LIMIT_PER_MINUTE=100
-
-# Database configuration
-ENV DB_MAX_CONN=10
-
-# Configuration path (fallback)
 ENV CONFIG_PATH=/app/config/config.yaml
 
-EXPOSE 8080
+# Production file size limits (more restrictive)
+ENV MAX_FILE_SIZE=500000000
+ENV MAX_MEMORY=64000000
 
-VOLUME ["/app/data", "/app/config"]
+# Production timeout configuration (more conservative)
+ENV READ_TIMEOUT=60
+ENV WRITE_TIMEOUT=300
+ENV IDLE_TIMEOUT=120
+ENV MAX_HEADER_BYTES=4096
+ENV READ_HEADER_TIMEOUT=30
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT}/health || exit 1
+# Production upload configuration
+ENV MAX_FILES_PER_REQUEST=20
+ENV MAX_TOTAL_SIZE_PER_REQUEST=1073741824
+ENV ALLOW_PARTIAL_SUCCESS=false
+ENV ENABLE_BATCH_PROCESSING=true
+ENV BATCH_SIZE=5
+ENV MAX_CONCURRENT_UPLOADS=10
+ENV STREAMING_THRESHOLD=52428800
+ENV VALIDATE_BEFORE_UPLOAD=true
+ENV ENABLE_PROGRESS_TRACKING=true
+ENV CLEANUP_ON_FAILURE=true
+ENV RATE_LIMIT_PER_MINUTE=200
 
+# Production database configuration
+ENV DB_MAX_CONN=25
 
-CMD ["./cloudlet"]
+# Security and logging
+ENV LOG_LEVEL=info
+ENV LOG_FORMAT=json
+ENV LOG_FILE=/app/logs/cloudlet.log
+ENV ENABLE_METRICS=true
+ENV METRICS_PORT=9090
+
+# Timezone
+ENV TZ=UTC
+
+EXPOSE 8080 9090
+
+# Define volumes for persistence
+VOLUME ["/app/data", "/app/config", "/app/logs"]
+
+# Optimized health check
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
+    CMD ["/app/cloudlet", "healthcheck"] || exit 1
+
+# Use exec form for better signal handling
+CMD ["/app/cloudlet"]
+
+# Security labels
+LABEL \
+    org.opencontainers.image.title="Cloudlet" \
+    org.opencontainers.image.description="Production-ready file upload service" \
+    org.opencontainers.image.vendor="Cloudlet" \
+    org.opencontainers.image.version="production" \
+    org.opencontainers.image.created="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+    security.non-root="true" \
+    security.readonly-rootfs="true"

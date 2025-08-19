@@ -2,86 +2,134 @@ version: "3.8"
 
 services:
   cloudlet:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+    image: cloudlet:production
+    container_name: cloudlet_app
     ports:
       - "${CLOUDLET_PORT:-8080}:8080"
+      - "${METRICS_PORT:-9090}:9090" # Metrics endpoint
     environment:
       # Server configuration
       - PORT=${CLOUDLET_PORT:-8080}
       - DB_DSN=/app/data/cloudlet.db
       - STORAGE_PATH=/app/data/storage
 
-      # File size limits
-      - MAX_FILE_SIZE=${MAX_FILE_SIZE:-100000000}
-      - MAX_MEMORY=${MAX_MEMORY:-32000000}
+      # File size limits (production values)
+      - MAX_FILE_SIZE=${MAX_FILE_SIZE:-500000000}
+      - MAX_MEMORY=${MAX_MEMORY:-64000000}
 
-      # Timeouts (in seconds)
-      - READ_TIMEOUT=${READ_TIMEOUT:-30}
-      - WRITE_TIMEOUT=${WRITE_TIMEOUT:-30}
-      - IDLE_TIMEOUT=${IDLE_TIMEOUT:-60}
-      - MAX_HEADER_BYTES=${MAX_HEADER_BYTES:-1024}
-      - READ_HEADER_TIMEOUT=${READ_HEADER_TIMEOUT:-10}
+      # Production timeouts (more conservative)
+      - READ_TIMEOUT=${READ_TIMEOUT:-60}
+      - WRITE_TIMEOUT=${WRITE_TIMEOUT:-300}
+      - IDLE_TIMEOUT=${IDLE_TIMEOUT:-120}
+      - MAX_HEADER_BYTES=${MAX_HEADER_BYTES:-4096}
+      - READ_HEADER_TIMEOUT=${READ_HEADER_TIMEOUT:-30}
 
-      # Upload configuration
-      - MAX_FILES_PER_REQUEST=${MAX_FILES_PER_REQUEST:-50}
-      - MAX_TOTAL_SIZE_PER_REQUEST=${MAX_TOTAL_SIZE_PER_REQUEST:-524288000}
-      - ALLOW_PARTIAL_SUCCESS=${ALLOW_PARTIAL_SUCCESS:-true}
+      # Production upload configuration
+      - MAX_FILES_PER_REQUEST=${MAX_FILES_PER_REQUEST:-20}
+      - MAX_TOTAL_SIZE_PER_REQUEST=${MAX_TOTAL_SIZE_PER_REQUEST:-1073741824}
+      - ALLOW_PARTIAL_SUCCESS=${ALLOW_PARTIAL_SUCCESS:-false}
       - ENABLE_BATCH_PROCESSING=${ENABLE_BATCH_PROCESSING:-true}
-      - BATCH_SIZE=${BATCH_SIZE:-10}
-      - MAX_CONCURRENT_UPLOADS=${MAX_CONCURRENT_UPLOADS:-3}
-      - STREAMING_THRESHOLD=${STREAMING_THRESHOLD:-10485760}
+      - BATCH_SIZE=${BATCH_SIZE:-5}
+      - MAX_CONCURRENT_UPLOADS=${MAX_CONCURRENT_UPLOADS:-10}
+      - STREAMING_THRESHOLD=${STREAMING_THRESHOLD:-52428800}
       - VALIDATE_BEFORE_UPLOAD=${VALIDATE_BEFORE_UPLOAD:-true}
-      - ENABLE_PROGRESS_TRACKING=${ENABLE_PROGRESS_TRACKING:-false}
-      - CLEANUP_ON_FAILURE=${CLEANUP_ON_FAILURE:-false}
-      - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-100}
+      - ENABLE_PROGRESS_TRACKING=${ENABLE_PROGRESS_TRACKING:-true}
+      - CLEANUP_ON_FAILURE=${CLEANUP_ON_FAILURE:-true}
+      - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-200}
 
-      # Database configuration
-      - DB_MAX_CONN=${DB_MAX_CONN:-10}
+      # Database configuration (production)
+      - DB_MAX_CONN=${DB_MAX_CONN:-25}
 
-      # Configuration path (fallback to YAML)
+      # Logging and monitoring
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_FORMAT=${LOG_FORMAT:-json}
+      - LOG_FILE=/app/logs/cloudlet.log
+      - ENABLE_METRICS=${ENABLE_METRICS:-true}
+      - METRICS_PORT=${METRICS_PORT:-9090}
+
+      # Configuration path
       - CONFIG_PATH=/app/config/config.yaml
 
+      # Security
+      - TZ=UTC
+
     volumes:
+      # Persistent data storage
       - cloudlet_data:/app/data
-      - cloudlet_config:/app/config
-      - ./config:/app/config:ro # Mount local configuration as read-only
+      - cloudlet_logs:/app/logs
+      # Configuration (read-only for security)
+      - ./config:/app/config:ro
+      # Temporary directory for uploads
+      - cloudlet_tmp:/tmp/cloudlet
 
     restart: unless-stopped
 
+    # Production health check
     healthcheck:
-      test:
-        [
-          "CMD",
-          "wget",
-          "--no-verbose",
-          "--tries=1",
-          "--spider",
-          "http://localhost:8080/health",
-        ]
-      interval: 30s
-      timeout: 10s
+      test: ["/app/cloudlet", "healthcheck"]
+      interval: 15s
+      timeout: 5s
       retries: 3
-      start_period: 40s
+      start_period: 30s
 
     networks:
       - cloudlet_network
 
-    # Resource limits
+    # Production resource limits
     deploy:
       resources:
         limits:
-          memory: ${CONTAINER_MEMORY_LIMIT:-512M}
-          cpus: "${CONTAINER_CPU_LIMIT:-1.0}"
+          memory: ${CONTAINER_MEMORY_LIMIT:-2G}
+          cpus: "${CONTAINER_CPU_LIMIT:-2.0}"
         reservations:
-          memory: ${CONTAINER_MEMORY_RESERVATION:-256M}
-          cpus: "${CONTAINER_CPU_RESERVATION:-0.5}"
+          memory: ${CONTAINER_MEMORY_RESERVATION:-1G}
+          cpus: "${CONTAINER_CPU_RESERVATION:-1.0}"
+
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+
+    # Production logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        labels: "service=cloudlet,environment=production"
 
 volumes:
   cloudlet_data:
     driver: local
-  cloudlet_config:
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-./data}
+
+  cloudlet_logs:
     driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${LOGS_PATH:-./logs}
+
+  cloudlet_tmp:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1G,uid=65532,gid=65532
 
 networks:
   cloudlet_network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
