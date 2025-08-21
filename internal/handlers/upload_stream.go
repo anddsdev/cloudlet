@@ -176,14 +176,15 @@ func (h *Handlers) UploadWithProgressTracking(w http.ResponseWriter, r *http.Req
 
 	// Create a progress tracking reader
 	progressReader := &ProgressTrackingReader{
-		reader:    file,
-		total:     header.Size,
-		progress:  0,
+		reader:   file,
+		total:    header.Size,
+		progress: 0,
 		onProgress: func(bytesRead, total int64) {
 			// In a real implementation, this could send progress updates
 			// via WebSocket, Server-Sent Events, or store progress in a cache
 			percentage := float64(bytesRead) / float64(total) * 100
 			_ = percentage // For now, just calculate but don't send
+			// TODO: Send progress update to client
 		},
 	}
 
@@ -216,13 +217,13 @@ type ProgressTrackingReader struct {
 // Read implements io.Reader interface with progress tracking
 func (ptr *ProgressTrackingReader) Read(p []byte) (n int, err error) {
 	n, err = ptr.reader.Read(p)
-	
+
 	if n > 0 {
 		ptr.progress += int64(n)
 		if ptr.onProgress != nil {
 			ptr.onProgress(ptr.progress, ptr.total)
 		}
 	}
-	
+
 	return n, err
 }
