@@ -8,7 +8,8 @@ RUN apk add --no-cache \
     tzdata \
     gcc \
     musl-dev \
-    sqlite-dev
+    sqlite-dev \
+    make
 
 WORKDIR /build
 
@@ -18,11 +19,11 @@ COPY go.mod go.sum ./
 # Download dependencies with retry and verification
 RUN go mod download && go mod verify
 
-# Copy source code
+# Copy source code including Makefile
 COPY . .
 
-# Build with production optimizations (native architecture)
-RUN CGO_ENABLED=1 go build -o cloudlet ./cmd/cloudlet/main.go
+# Build using Makefile with production optimizations
+RUN CGO_ENABLED=1 make build && mv main.exe cloudlet
 
 # Verify the binary works
 RUN ./cloudlet --help || echo "Binary built successfully"
