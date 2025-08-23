@@ -13,7 +13,13 @@ build-client:
 	@echo "Building client..."
 	@if [ -d "client" ]; then \
 		mkdir -p web; \
-		cd client && npm run build; \
+		if command -v bun >/dev/null 2>&1; then \
+			echo "Using bun to build client..."; \
+			cd client && bun run build; \
+		else \
+			echo "Bun not found, using npm to build client..."; \
+			cd client && npm run build; \
+		fi; \
 		echo "Client built successfully to web/"; \
 	else \
 		echo "Client directory not found, skipping client build"; \
