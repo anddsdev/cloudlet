@@ -1,9 +1,11 @@
-import { Button } from "./components/ui/button";
+import { Dashboard } from './components/Dashboard';
+import { Toaster } from './components/ui/sonner';
 
 export default function App() {
   return (
-    <div className="flex min-h-svh flex-col items-center justify-center">
-      <Button>Click me</Button>
+    <div className="min-h-screen bg-background">
+      <Dashboard />
+      <Toaster />
     </div>
   );
 }
