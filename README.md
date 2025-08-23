@@ -11,6 +11,9 @@ A lightweight, self-hosted file storage service designed to be simple, fast, and
 - 📁 **File Management**: Upload, download, and organize files
 - 📂 **Directory Operations**: Create, navigate, and manage folder structures
 - 🔄 **File Operations**: Move, rename, and delete files and directories
+  - Smart deletion with recursive directory support
+  - Confirmation dialogs for destructive operations
+  - Atomic transactions for data consistency
 - 📊 **Statistics**: View file information, directory sizes, and item counts
 - 🗂️ **Multiple File Types**: Support for various file formats with MIME type detection
 - ⚡ **High Performance**: Built with Go for speed and efficiency
@@ -59,7 +62,35 @@ A lightweight, self-hosted file storage service designed to be simple, fast, and
    ./cloudlet
    ```
 
-The server will start on `http://localhost:8080` by default.
+The server will start on `http://localhost:8080` by default and will serve the web interface at the root path.
+
+### Frontend Development
+
+To run the React frontend in development mode:
+
+1. **Navigate to the client directory**
+   ```bash
+   cd client
+   ```
+
+2. **Install dependencies**
+   ```bash
+   bun install
+   ```
+
+3. **Start the development server**
+   ```bash
+   bun run dev
+   ```
+
+The frontend will start on `http://localhost:5173` and will proxy API requests to the backend on port 8080.
+
+4. **Build for production**
+   ```bash
+   bun run build
+   ```
+
+The built files are output to `../web/` directory to be served by the Go backend.
 
 ### Using Docker (Coming Soon)
 
@@ -151,7 +182,7 @@ database:
 | `POST`   | `/api/v1/upload/chunked`        | Chunked upload with progress     |
 | `POST`   | `/api/v1/upload/progress`       | Upload with progress tracking    |
 | `GET`    | `/api/v1/download/{path}`       | Download a file                  |
-| `DELETE` | `/api/v1/files`                 | Delete a file                    |
+| `DELETE` | `/api/v1/files/{path}`          | Delete a file or directory       |
 
 #### Directories
 
@@ -233,6 +264,41 @@ Response:
 }
 ```
 
+#### Delete files and directories
+
+Delete a single file:
+```bash
+curl -X DELETE http://localhost:8080/api/v1/files/document.txt
+```
+
+Delete an empty directory:
+```bash
+curl -X DELETE http://localhost:8080/api/v1/files/empty-folder
+```
+
+Delete a directory and all its contents recursively:
+```bash
+curl -X DELETE "http://localhost:8080/api/v1/files/folder-with-content?recursive=true"
+```
+
+Response for successful deletion:
+```json
+{
+  "success": true,
+  "message": "File deleted successfully",
+  "path": "/folder-with-content"
+}
+```
+
+Response for non-empty directory without recursive parameter:
+```json
+{
+  "error": true,
+  "message": "Directory not empty",
+  "status": 409
+}
+```
+
 ## 🏗️ Architecture
 
 Cloudlet follows clean architecture principles with clear separation of concerns:
@@ -252,6 +318,12 @@ cloudlet/
 │   ├── storage/           # AtomicFileOperations
 │   ├── transaction/       # TransactionManager
 │   └── utils/             # Utility functions and validators
+├── client/                # React frontend application
+│   ├── src/
+│   │   ├── components/    # React components (Dashboard, FileList, etc.)
+│   │   ├── services/      # API communication layer
+│   │   └── lib/           # Utilities and helpers
+├── web/                   # Built frontend assets (served by Go)
 ├── data/                  # SQLite database
 └── storage/               # File storage directory
 ```
@@ -271,6 +343,19 @@ cloudlet/
 - **Storage**: **AtomicFileOperations**: Thread-safe file operations
 - **Transaction**: **TransactionManager**: Ensures data consistency
 - **Models**: Define data structures and API contracts
+
+#### Frontend Architecture
+
+- **React Components**: Modern functional components with hooks
+  - **Dashboard**: Main interface with file management
+  - **FileList**: Table view with file operations
+  - **FileUploadZone**: Drag & drop upload with progress
+  - **Modals**: Confirmation dialogs for destructive operations
+- **Services Layer**: API communication with strategy pattern
+  - **uploadStrategy**: Smart upload method selection
+  - **fileService**: Core file operations API calls
+- **UI Components**: shadcn/ui for consistent design system
+- **State Management**: React hooks with real-time notifications
 
 ## 🔐 Security & Performance
 
@@ -325,18 +410,30 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 
 ### Code Style
 
+**Backend (Go):**
 - Follow Go conventions and use `gofmt`
 - Write clear, descriptive commit messages
 - Add tests for new features
 - Update documentation as needed
 
+**Frontend (React/TypeScript):**
+- Use TypeScript for type safety
+- Follow React hooks patterns
+- Use shadcn/ui components for consistency
+- Implement proper error handling with user feedback
+- Write responsive and accessible interfaces
+
 ## 📋 Roadmap
 
-- [ ] Web UI interface
+- [x] **Web UI interface** - Modern React dashboard with drag & drop uploads
+  - [x] File and directory management
+  - [x] Smart upload strategies (single, multiple, batch, stream)
+  - [x] Recursive directory deletion with confirmation
+  - [x] Real-time progress tracking and notifications
 - [ ] User authentication and authorization
 - [ ] File sharing with expirable links
 - [ ] File versioning
-- [ ] Bulk operations
+- [ ] Bulk operations (move, copy multiple files)
 - [ ] File search functionality
 - [ ] Docker container support
 - [ ] Cloud storage backends (S3, etc.)
@@ -358,9 +455,20 @@ This project is licensed under the AGPL-3.0 License - see the [LICENSE](LICENSE)
 
 ## 🙏 Acknowledgments
 
+**Backend:**
 - Built with [Go](https://golang.org/)
 - Database powered by [SQLite](https://sqlite.org/)
 - Configuration with [gopkg.in/yaml.v3](https://gopkg.in/yaml.v3)
+
+**Frontend:**
+- [React](https://reactjs.org/) - UI framework
+- [TypeScript](https://www.typescriptlang.org/) - Type safety
+- [Tailwind CSS](https://tailwindcss.com/) - Styling framework
+- [shadcn/ui](https://ui.shadcn.com/) - Component library
+- [Vite](https://vitejs.dev/) - Build tool and dev server
+- [Lucide React](https://lucide.dev/) - Icon library
+- [React Dropzone](https://react-dropzone.js.org/) - Drag & drop uploads
+- [Sonner](https://sonner.emilkowal.ski/) - Toast notifications
 
 ## 📬 Contact
 
