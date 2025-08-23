@@ -23,7 +23,7 @@ RUN go mod download && go mod verify
 COPY . .
 
 # Build using Makefile with production optimizations
-RUN CGO_ENABLED=1 make build && mv main.exe cloudlet
+RUN CGO_ENABLED=0 make build && mv main.exe cloudlet
 
 # Verify the binary works
 RUN ./cloudlet --help || echo "Binary built successfully"
