@@ -8,7 +8,8 @@ A lightweight, self-hosted file storage service designed to be simple, fast, and
 
 ## ✨ Features
 
-- 📁 **File Management**: Upload, download, and organize files
+- 🌐 **Modern Web Interface**: Beautiful, responsive React-based dashboard with drag & drop support
+- 📁 **File Management**: Upload, download, and organize files through both web UI and API
 - 📂 **Directory Operations**: Create, navigate, and manage folder structures
 - 🔄 **File Operations**: Move, rename, and delete files and directories
   - Smart deletion with recursive directory support
@@ -86,19 +87,40 @@ To run the React frontend in development mode:
 The frontend will start on `http://localhost:5173` and will proxy API requests to the backend on port 8080.
 
 4. **Build for production**
+
+   Using Make (builds both client and backend):
    ```bash
-   bun run build
+   make build-prod
    ```
 
-The built files are output to `../web/` directory to be served by the Go backend.
+   Or build individually:
+   ```bash
+   make build-client  # Builds React client to web/
+   make build         # Builds Go backend
+   ```
 
-### Using Docker (Coming Soon)
+   Or using npm/bun directly (client only):
+   ```bash
+   cd client && bun run build
+   ```
 
+The built client files are output to `web/` directory to be served by the Go backend.
+
+### Using Docker
+
+Build and run with Docker:
 ```bash
+# Build Docker image (includes both client and backend)
+make docker-build
+# or
+docker build -t cloudlet:latest .
+
+# Run container
+make docker-run
+# or
 docker run -d \
   --name cloudlet \
   -p 8080:8080 \
-  -v ./storage:/app/storage \
   -v ./data:/app/data \
   cloudlet:latest
 ```
@@ -435,7 +457,7 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 - [ ] File versioning
 - [ ] Bulk operations (move, copy multiple files)
 - [ ] File search functionality
-- [ ] Docker container support
+- [x] Docker container support
 - [ ] Cloud storage backends (S3, etc.)
 - [ ] File encryption
 - [ ] API rate limiting

@@ -7,9 +7,10 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   build: {
-    outDir: "../web",
+    outDir: process.env.NODE_ENV === 'docker' ? 'dist' : '../web',
     cssMinify: true,
     minify: "esbuild",
+    emptyOutDir: true,
   },
   resolve: {
     alias: {
