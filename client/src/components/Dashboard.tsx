@@ -1,27 +1,32 @@
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { FileUploadZone } from './FileUploadZone';
-import { FileList } from './FileList';
-import { Breadcrumb } from './Breadcrumb';
-import { CreateDirectoryDialog } from './CreateDirectoryDialog';
-import { RenameDialog } from './RenameDialog';
-import { DeleteConfirmDialog } from './DeleteConfirmDialog';
-import { fileService } from '@/services/fileService';
-import type { ListFilesResponse } from '@/services/api';
-import { FolderPlus, RefreshCw, HardDrive } from 'lucide-react';
-import { toast } from 'sonner';
-import { formatFileSize } from '@/lib/formatters';
+import React, { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { FileUploadZone } from "./FileUploadZone";
+import { FileList } from "./FileList";
+import { Breadcrumb } from "./Breadcrumb";
+import { CreateDirectoryDialog } from "./CreateDirectoryDialog";
+import { RenameDialog } from "./RenameDialog";
+import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
+import { fileService } from "@/services/fileService";
+import type { ListFilesResponse } from "@/services/api";
+import { FolderPlus, RefreshCw, HardDrive } from "lucide-react";
+import { toast } from "sonner";
+import { formatFileSize } from "@/lib/formatters";
 
 export const Dashboard: React.FC = () => {
-  const [currentPath, setCurrentPath] = useState('/');
+  const [currentPath, setCurrentPath] = useState("/");
   const [data, setData] = useState<ListFilesResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [createDirOpen, setCreateDirOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
-  const [renameTarget, setRenameTarget] = useState({ path: '', name: '' });
+  const [renameTarget, setRenameTarget] = useState({ path: "", name: "" });
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState({ path: '', name: '', isDirectory: false, hasChildren: false });
+  const [deleteTarget, setDeleteTarget] = useState({
+    path: "",
+    name: "",
+    isDirectory: false,
+    hasChildren: false,
+  });
   const [isDeleting, setIsDeleting] = useState(false);
 
   const loadFiles = async (path: string = currentPath) => {
@@ -31,15 +36,15 @@ export const Dashboard: React.FC = () => {
       setData(result);
       setCurrentPath(path);
     } catch (error) {
-      toast.error('Failed to load files');
-      console.error('Error loading files:', error);
+      toast.error("Failed to load files");
+      console.error("Error loading files:", error);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    loadFiles('/');
+    loadFiles("/");
   }, []);
 
   const handleNavigate = (path: string) => {
@@ -54,19 +59,25 @@ export const Dashboard: React.FC = () => {
     fileService.downloadFile(path);
   };
 
-  const handleFileDelete = async (path: string, name: string, isDirectory: boolean) => {
+  const handleFileDelete = async (
+    path: string,
+    name: string,
+    isDirectory: boolean
+  ) => {
     let hasChildren = false;
-    
+
     // Check if directory has children
     if (isDirectory) {
       try {
         const dirInfo = await fileService.listFiles(path);
-        hasChildren = (dirInfo.files?.length || 0) > 0 || (dirInfo.directories?.length || 0) > 0;
+        hasChildren =
+          (dirInfo.files?.length || 0) > 0 ||
+          (dirInfo.directories?.length || 0) > 0;
       } catch (error) {
-        console.error('Error checking directory contents:', error);
+        console.error("Error checking directory contents:", error);
       }
     }
-    
+
     setDeleteTarget({ path, name, isDirectory, hasChildren });
     setDeleteOpen(true);
   };
@@ -75,11 +86,12 @@ export const Dashboard: React.FC = () => {
     setIsDeleting(true);
     try {
       await fileService.deleteFile(deleteTarget.path, recursive);
-      toast.success('Item deleted successfully');
+      toast.success("Item deleted successfully");
       setDeleteOpen(false);
       loadFiles();
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to delete item';
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to delete item";
       toast.error(errorMessage);
     } finally {
       setIsDeleting(false);
@@ -141,11 +153,13 @@ export const Dashboard: React.FC = () => {
                     onClick={refresh}
                     disabled={isLoading}
                   >
-                    <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                    <RefreshCw
+                      className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
+                    />
                   </Button>
                 </div>
               </div>
-              
+
               {data && data.breadcrumbs && (
                 <Breadcrumb
                   items={data.breadcrumbs}
@@ -153,7 +167,7 @@ export const Dashboard: React.FC = () => {
                 />
               )}
             </CardHeader>
-            
+
             <CardContent>
               {data && (
                 <FileList
@@ -201,12 +215,14 @@ export const Dashboard: React.FC = () => {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Total Size:</span>
-                  <span className="font-medium">{formatFileSize(data.total_size)}</span>
+                  <span className="font-medium">
+                    {formatFileSize(data.total_size)}
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Current Path:</span>
                   <span className="font-medium font-mono text-xs">
-                    {currentPath === '/' ? 'Root' : currentPath}
+                    {currentPath === "/" ? "Root" : currentPath}
                   </span>
                 </div>
               </CardContent>

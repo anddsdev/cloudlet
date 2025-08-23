@@ -19,16 +19,23 @@ export const fetcher = async (url: string, options?: RequestInit) => {
 export interface FileInfo {
   name: string;
   size: number;
-  modified: string;
+  updated_at: string;
   is_directory: boolean;
   path: string;
   mime_type?: string;
 }
 
 export interface DirectoryInfo {
+  id: number;
   name: string;
   path: string;
-  file_count: number;
+  size: number;
+  mime_type: string;
+  is_directory: boolean;
+  parent_path: string;
+  created_at: string;
+  updated_at: string;
+  item_count: number;
   total_size: number;
 }
 
