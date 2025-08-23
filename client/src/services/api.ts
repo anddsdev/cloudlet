@@ -1,10 +1,10 @@
-const API_BASE_URL = 'http://localhost:8080/api/v1';
+const API_BASE_URL = "/api/v1";
 
 export const fetcher = async (url: string, options?: RequestInit) => {
   const response = await fetch(`${API_BASE_URL}${url}`, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       ...options?.headers,
     },
   });
@@ -56,7 +56,7 @@ export interface UploadResponse {
 
 export interface BatchUploadResponse {
   batch_id: string;
-  status: 'processing' | 'completed' | 'failed';
+  status: "processing" | "completed" | "failed";
   total_files: number;
   processed_files: number;
   success_count: number;
@@ -66,7 +66,7 @@ export interface BatchUploadResponse {
 
 export interface BatchProgressResponse {
   batch_id: string;
-  status: 'processing' | 'completed' | 'failed' | 'cancelled';
+  status: "processing" | "completed" | "failed" | "cancelled";
   total_files: number;
   processed_files: number;
   success_count: number;

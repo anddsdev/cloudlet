@@ -17,16 +17,9 @@ export const fileService = {
 
   async deleteFile(path: string, recursive: boolean = false): Promise<void> {
     const url = `/files${path.startsWith('/') ? path : '/' + path}${recursive ? '?recursive=true' : ''}`;
-    const response = await fetch(`http://localhost:8080/api/v1${url}`, {
+    return fetcher(url, {
       method: 'DELETE',
     });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-    }
-
-    return response.json();
   },
 
   async moveFile(sourcePath: string, destinationPath: string): Promise<void> {
@@ -44,7 +37,7 @@ export const fileService = {
   },
 
   async downloadFile(path: string): Promise<void> {
-    const url = `http://localhost:8080/api/v1/download/${encodeURIComponent(path)}`;
+    const url = `/api/v1/download/${encodeURIComponent(path)}`;
     window.open(url, '_blank');
   },
 };
