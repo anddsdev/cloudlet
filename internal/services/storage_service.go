@@ -118,6 +118,16 @@ func (s *StorageService) Close() error {
 	return nil
 }
 
+// GetPhysicalPath returns the physical file system path for a given relative path
+func (s *StorageService) GetPhysicalPath(relativePath string) string {
+	fullPath, err := s.getSecureFullPath(relativePath)
+	if err != nil {
+		// Return a safe fallback path if validation fails
+		return s.basePath
+	}
+	return fullPath
+}
+
 // getSecureFullPath validates and returns the full path safely
 func (s *StorageService) getSecureFullPath(relativePath string) (string, error) {
 	return s.pathValidator.ValidateAndGetFullPath(relativePath)

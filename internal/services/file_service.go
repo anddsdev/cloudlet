@@ -475,6 +475,7 @@ func (s *FileService) isValidName(name string) bool {
 	return security.IsValidFilename(name) == nil
 }
 
+
 func (s *FileService) detectMimeType(filename string) string {
 	ext := strings.ToLower(filepath.Ext(filename))
 
