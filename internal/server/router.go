@@ -30,7 +30,7 @@ func (r *Router) setupRoutes() {
 
 	mux.HandleFunc("GET /api/v1/files", r.withMiddleware(h.ListFiles))
 	mux.HandleFunc("GET /api/v1/files/{path}", r.withMiddleware(h.ListFiles))
-	mux.HandleFunc("DELETE /api/v1/files", r.withMiddleware(h.DeleteFile))
+	mux.HandleFunc("DELETE /api/v1/files/{path...}", r.withMiddleware(h.DeleteFile))
 	mux.HandleFunc("POST /api/v1/upload", r.withMiddleware(h.Upload))
 	mux.HandleFunc("POST /api/v1/upload/stream", r.withMiddleware(h.UploadStream))
 	mux.HandleFunc("POST /api/v1/upload/chunked", r.withMiddleware(h.UploadChunked))

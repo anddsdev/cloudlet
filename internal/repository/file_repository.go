@@ -3,6 +3,7 @@ package repository
 import (
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/anddsdev/cloudlet/internal/database"
 	"github.com/anddsdev/cloudlet/internal/models"
@@ -103,14 +104,15 @@ func (r *FileRepository) GetFileByPath(path string) (*models.FileInfo, error) {
 }
 
 func (r *FileRepository) InsertFile(file *models.FileInfo) error {
+	now := time.Now()
 	query := `
-	INSERT INTO files (name, path, size, mime_type, is_directory, parent_path)
-	VALUES (?, ?, ?, ?, ?, ?)
+	INSERT INTO files (name, path, size, mime_type, is_directory, parent_path, created_at, updated_at)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	result, err := r.db.Exec(query,
 		file.Name, file.Path, file.Size, file.MimeType,
-		file.IsDirectory, file.ParentPath,
+		file.IsDirectory, file.ParentPath, now, now,
 	)
 	if err != nil {
 		return err
@@ -122,6 +124,8 @@ func (r *FileRepository) InsertFile(file *models.FileInfo) error {
 	}
 
 	file.ID = id
+	file.CreatedAt = now
+	file.UpdatedAt = now
 	return nil
 }
 
@@ -172,7 +176,7 @@ func (r *FileRepository) RenameFile(oldPath, newName string) error {
 	defer tx.Rollback()
 
 	// Update the file/directory
-	_, err = tx.Exec("UPDATE files SET name = ?, path = ? WHERE path = ?", newName, newPath, oldPath)
+	_, err = tx.Exec("UPDATE files SET name = ?, path = ?, updated_at = ? WHERE path = ?", newName, newPath, time.Now(), oldPath)
 	if err != nil {
 		return err
 	}
@@ -211,8 +215,8 @@ func (r *FileRepository) MoveFile(sourcePath, destinationPath string) error {
 	}
 	defer tx.Rollback()
 
-	_, err = tx.Exec("UPDATE files SET path = ?, parent_path = ? WHERE path = ?",
-		newPath, destinationPath, sourcePath)
+	_, err = tx.Exec("UPDATE files SET path = ?, parent_path = ?, updated_at = ? WHERE path = ?",
+		newPath, destinationPath, time.Now(), sourcePath)
 	if err != nil {
 		return err
 	}

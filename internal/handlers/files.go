@@ -46,7 +46,10 @@ func (h *Handlers) DeleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := h.fileService.DeleteFile(path)
+	// Check for recursive parameter
+	recursive := r.URL.Query().Get("recursive") == "true"
+
+	err := h.fileService.DeleteFile(path, recursive)
 	if err != nil {
 		if err == services.ErrFileNotFound {
 			utils.WriteErrorJSON(w, http.StatusNotFound, "File not found")

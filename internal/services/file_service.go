@@ -307,7 +307,7 @@ func (s *FileService) MoveFile(sourcePath, destinationPath string) error {
 	return nil
 }
 
-func (s *FileService) DeleteFile(path string) error {
+func (s *FileService) DeleteFile(path string, recursive ...bool) error {
 	// Validate and normalize path
 	validatedPath, err := s.pathValidator.ValidateAndNormalizePath(path)
 	if err != nil {
@@ -319,6 +319,29 @@ func (s *FileService) DeleteFile(path string) error {
 	fileInfo, err := s.repo.GetFileByPath(path)
 	if err != nil {
 		return ErrFileNotFound
+	}
+
+	// Check if this is a directory and if recursive deletion is requested
+	isRecursive := len(recursive) > 0 && recursive[0]
+	
+	if fileInfo.IsDirectory && !isRecursive {
+		// Check if directory has children
+		children, err := s.repo.GetFilesByPath(path)
+		if err != nil {
+			return err
+		}
+		
+		if len(children) > 0 {
+			return errors.New("directory not empty")
+		}
+	}
+
+	// If it's a directory and recursive is true, delete all children first
+	if fileInfo.IsDirectory && isRecursive {
+		if err := s.deleteDirectoryRecursive(path); err != nil {
+			return fmt.Errorf("failed to delete directory recursively: %w", err)
+		}
+		return nil
 	}
 
 	// Create transaction manager for atomic operations
@@ -355,6 +378,36 @@ func (s *FileService) DeleteFile(path string) error {
 	// Execute all operations with automatic rollback on failure
 	if err := tm.Execute(); err != nil {
 		return fmt.Errorf("failed to delete file %s: %w", path, err)
+	}
+
+	return nil
+}
+
+func (s *FileService) deleteDirectoryRecursive(path string) error {
+	// Get all children of this directory
+	children, err := s.repo.GetFilesByPath(path)
+	if err != nil {
+		return err
+	}
+
+	// First, delete all files and subdirectories recursively
+	for _, child := range children {
+		if child.IsDirectory {
+			// Recursively delete subdirectory
+			if err := s.deleteDirectoryRecursive(child.Path); err != nil {
+				return fmt.Errorf("failed to delete subdirectory %s: %w", child.Path, err)
+			}
+		} else {
+			// Delete file
+			if err := s.DeleteFile(child.Path, false); err != nil {
+				return fmt.Errorf("failed to delete file %s: %w", child.Path, err)
+			}
+		}
+	}
+
+	// Finally, delete the directory itself
+	if err := s.DeleteFile(path, false); err != nil {
+		return fmt.Errorf("failed to delete directory %s: %w", path, err)
 	}
 
 	return nil
@@ -421,6 +474,7 @@ func (s *FileService) generateBreadcrumbs(path string) []models.Breadcrumb {
 func (s *FileService) isValidName(name string) bool {
 	return security.IsValidFilename(name) == nil
 }
+
 
 func (s *FileService) detectMimeType(filename string) string {
 	ext := strings.ToLower(filepath.Ext(filename))

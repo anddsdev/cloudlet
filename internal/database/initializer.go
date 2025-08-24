@@ -135,11 +135,14 @@ func (di *DatabaseInitializer) runMigrations(db *sql.DB) error {
 			Version: 1,
 			SQL:     `-- Migration 1: Initial schema (already handled in createTables)`,
 		},
-		// Add future migrations here
-		// {
-		//     Version: 2,
-		//     SQL:     `ALTER TABLE files ADD COLUMN new_field TEXT;`,
-		// },
+		{
+			Version: 2,
+			SQL:     `ALTER TABLE files ADD COLUMN modified_at DATETIME; UPDATE files SET modified_at = updated_at WHERE modified_at IS NULL;`,
+		},
+		{
+			Version: 3,
+			SQL:     `ALTER TABLE files DROP COLUMN modified_at;`,
+		},
 	}
 
 	// Run pending migrations

@@ -1,4 +1,21 @@
 # Multi-stage build for production optimization
+FROM node:20-alpine AS client-builder
+
+WORKDIR /client
+
+# Copy client package files
+COPY client/package.json client/bun.lock* ./
+
+# Install dependencies using npm (fallback if bun not available)
+RUN npm ci --only=production
+
+# Copy client source code
+COPY client/ .
+
+# Build client for production
+RUN NODE_ENV=docker npm run build
+
+# Backend builder stage
 FROM golang:1.23.4-alpine AS builder
 
 # Install build dependencies
@@ -21,6 +38,9 @@ RUN go mod download && go mod verify
 
 # Copy source code including Makefile
 COPY . .
+
+# Copy built client files to web directory
+COPY --from=client-builder /client/dist ./web/
 
 # Build using Makefile with production optimizations
 RUN CGO_ENABLED=1 make build && mv main.exe cloudlet
@@ -53,6 +73,9 @@ WORKDIR /app
 
 # Copy the optimized binary
 COPY --from=builder --chown=cloudlet:cloudlet /build/cloudlet ./
+
+# Copy built web assets
+COPY --from=builder --chown=cloudlet:cloudlet /build/web ./web/
 
 # Copy default configuration (can be overridden)
 COPY --chown=cloudlet:cloudlet config/config.yaml config/
